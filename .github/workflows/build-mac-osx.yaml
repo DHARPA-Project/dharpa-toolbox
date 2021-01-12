@@ -1,0 +1,56 @@
+name: "build darwin binaries for 'dharpa-toolbox'"
+# This workflow is triggered on pushes to the repository.
+on: [push]
+env:
+  DEVELOPER_DIR: /Applications/Xcode_10.3.app/Contents/Developer
+  MACOSX_DEPLOYMENT_TARGET: 10.14
+
+
+jobs:
+  test-darwin:
+    name: pytest on darwin
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python_version: [3.6, 3.7, 3.8]
+    steps:
+      - name: "Set up Python ${{ matrix.python_version }}"
+        uses: actions/setup-python@v2
+        with:
+          python-version: "${{ matrix.python_version }}"
+      - uses: actions/checkout@v2
+      - name: install requirements
+        run: pip install -U --extra-index-url https://pkgs.frkl.io/frkl/dev --extra-index-url https://pkgs.frkl.dev/pypi -e '.[testing,all]'
+      - name: Test with pytest
+        run: make test
+
+  mypy-darwin:
+    name: mypy check on darwin
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python_version: [3.6, 3.7, 3.8]
+    steps:
+      - name: "Set up Python ${{ matrix.python_version }}"
+        uses: actions/setup-python@v2
+        with:
+          python-version: "${{ matrix.python_version }}"
+      - uses: actions/checkout@v2
+      - name: install requirements
+        run: pip install -U --extra-index-url https://pkgs.frkl.io/frkl/dev --extra-index-url https://pkgs.frkl.dev/pypi -e '.[testing,all]'
+      - name: Test with mypy
+        run: make mypy
+
+  flake8-darwin:
+    name: flake8 on darwin
+    runs-on: macos-latest
+    steps:
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - uses: actions/checkout@v2
+      - name: install requirements
+        run: pip install -U --extra-index-url https://pkgs.frkl.io/frkl/dev --extra-index-url https://pkgs.frkl.dev/pypi -e '.[testing,all]'
+      - name: Test with flake8
+        run: make flake

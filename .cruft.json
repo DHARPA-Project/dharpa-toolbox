@@ -1,0 +1,17 @@
+{
+    "template": "https://gitlab.com/frkl/frkl.python-project.git",
+    "commit": "9e816f7b9170b5b608f16f66db693696c778d2f4",
+    "context": {
+        "cookiecutter": {
+            "full_name": "Markus Binsteiner",
+            "email": "markus.binsteiner@uni.lu",
+            "project_name": "dharpa-toolbox",
+            "exe_name": "dharpa-toolbox",
+            "project_slug": "dharpa_toolbox",
+            "project_main_module": "dharpa_toolbox",
+            "project_short_description": "Tools and utilities for the DHARPA project",
+            "_template": "https://gitlab.com/frkl/frkl.python-project.git"
+        }
+    },
+    "directory": null
+}

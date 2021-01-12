@@ -1,0 +1,23 @@
+.dharpa_toolbox_test:
+  image: python:3.8
+  before_script:
+    - curl -O https://bootstrap.pypa.io/get-pip.py
+    - python get-pip.py
+    - pip install -U setuptools tox
+  script:
+    - tox -e py38
+
+dharpa_toolbox_test_tox_py36:
+  extends: .dharpa_toolbox_test
+  image: python:3.6
+  script:
+    - tox -e py36
+
+dharpa_toolbox_test_tox_py37:
+  extends: .dharpa_toolbox_test
+  image: python:3.7
+  script:
+    - tox -e py37
+
+dharpa_toolbox_test_tox_py38:
+  extends: .dharpa_toolbox_test

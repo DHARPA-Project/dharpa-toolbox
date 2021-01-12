@@ -1,0 +1,16 @@
+dharpa_toolbox_build_binary_windows:
+  image:
+    name: registry.gitlab.com/frkl/frkl-python-build:dev-win
+    entrypoint: [""]
+  stage: build_windows
+  needs:
+    - dharpa_toolbox_build_pkg_dev
+  variables:
+    SRCDIR: $CI_PROJECT_DIR
+    TEMPDIR: "$CI_PROJECT_DIR/build_temp"
+    PYTHON_VERSION: "3.7.8"
+  script:
+    - "/opt/entrypoint.sh"
+  artifacts:
+    paths:
+      - dist/windows/dharpa-toolbox.exe
