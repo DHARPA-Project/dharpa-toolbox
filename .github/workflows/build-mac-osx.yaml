@@ -1,4 +1,4 @@
-name: "build darwin binaries for 'dharpa-toolbox'"
+name: "run checks on darwin"
 # This workflow is triggered on pushes to the repository.
 on: [push]
 env:
@@ -12,7 +12,8 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python_version: [3.6, 3.7, 3.8]
+#        python_version: [3.6, 3.7, 3.8]
+        python_version: [3.8]
     steps:
       - name: "Set up Python ${{ matrix.python_version }}"
         uses: actions/setup-python@v2
@@ -29,7 +30,8 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python_version: [3.6, 3.7, 3.8]
+#        python_version: [3.6, 3.7, 3.8]
+        python_version: [3.8]
     steps:
       - name: "Set up Python ${{ matrix.python_version }}"
         uses: actions/setup-python@v2
