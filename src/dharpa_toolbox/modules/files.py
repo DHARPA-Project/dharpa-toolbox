@@ -151,6 +151,16 @@ class FileSetValue(HasTraits):
 
 
 class ReadFilesModule(DharpaModule):
+    """Reads the content of one or multiple files into a dictionary.
+
+    The input can either be:
+      - a string: the string must be the path to a file
+      - a list of strings: each string must be the path to a file
+      - a dict: each key is the id of a file (usually the file name), and the value is a dict with 'metadata' and 'content' keys (see FileUpload widget for details)
+
+    The 'content_map' output value is a dict with the file id as key, and the content the decoded utf-8 text, as read from the file(s).
+
+    """
 
     _module_name = "file_reader"
 

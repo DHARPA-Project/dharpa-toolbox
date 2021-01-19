@@ -1,4 +1,9 @@
 ---
+_doc: |
+  Receives a dict with the id of a text as key, and the text as value, tokenizes the text(s) and then processes the tokenized values according to the provided settings.
+
+  Currently, lowercasing and the removal of stopwords is supported.
+
 modules:
 
 - type: tokenize_corpus

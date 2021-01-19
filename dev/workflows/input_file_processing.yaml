@@ -1,4 +1,9 @@
 ---
+_doc: |
+  Reads one or several (text)-files, tokenzies the content, then processes the tokenized content according to the provided settings.
+
+  Currently, lowercasing and the removal of stopwords is supported.
+
 modules:
 
 - type: file_reader

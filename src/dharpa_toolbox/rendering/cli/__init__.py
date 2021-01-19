@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import inspect
 from inspect import Parameter, Signature
 from typing import Any, List, Type
 
@@ -84,6 +85,13 @@ def create_processing_function_for_typer(cls: Type):
     #
     #     result = describe_module(_obj)
     #     return result
+
+    doc = obj.__doc__
+    if not doc:
+        doc = "-- no documentation available --"
+    doc = inspect.cleandoc(doc)
+
+    func.__doc__ = doc
 
     return func
 

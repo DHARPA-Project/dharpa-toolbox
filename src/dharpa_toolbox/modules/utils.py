@@ -76,11 +76,18 @@ def generate_workflow_class_from_file(path: Union[str, Path]):
     file_name_without_ext = path.name.split(".")[0]
     content = get_data_from_file(path)
 
+    doc = content.pop("_doc", None)
+
     def constructor(self, **config):
         config.update(content)
         DharpaWorkflow.__init__(self, **config)
 
-    attrs = {"_module_name": file_name_without_ext, "__init__": constructor}
+    attrs = {
+        "_module_name": file_name_without_ext,
+        "__init__": constructor,
+        "_workflow_config": content,
+        "__doc__": doc,
+    }
 
     cls = type(
         f"Workflow{to_camel_case(file_name_without_ext, capitalize=True)}",

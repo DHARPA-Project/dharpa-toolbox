@@ -23,6 +23,10 @@ class PreprocessorInputValue(TokenizedTextValue):
 
 
 class TokenizeCorpusModule(DharpaModule):
+    """Tokenize a text collection.
+
+    The 'text_map' input is a dict with the id of a text as the key, and the text (as string) as the value.
+    """
 
     _module_name = "tokenize_corpus"
 
@@ -88,6 +92,10 @@ class TextPreprocessingModule(DharpaModule):
 
 
 class LowercaseTextModule(TextPreprocessingModule):
+    """Lowercase every word in a corpus.
+
+    The 'tokenized_text' input is a dictionary with an id of a text as key, and the tokenized text itself (as list of strings) as value.
+    """
 
     _module_name = "lowercase_corpus"
 
@@ -99,12 +107,18 @@ class LowercaseTextModule(TextPreprocessingModule):
 
 
 class RemoveStopwordsModule(TextPreprocessingModule):
+    """Remove stopwords from a corpus.
+
+    The 'tokenized_text' input is a dictionary with an id of a text as key, and the tokenized text itself (as list of strings) as value.
+    """
 
     _module_name = "remove_stopwords_from_corpus"
 
     def _create_inputs(self, **config) -> HasTraits:
         class RemoveStopwordsInput(PreprocessorInputValue):
-            stopwords_list = traitlets.List()
+            stopwords_list = traitlets.List(
+                default_value=[], trait=Unicode(allow_none=False)
+            )
 
         return RemoveStopwordsInput()
 

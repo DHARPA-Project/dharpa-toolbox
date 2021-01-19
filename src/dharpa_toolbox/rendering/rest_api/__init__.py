@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
+import inspect
 from inspect import Parameter, Signature
 from typing import Type
 
+import yaml
 from dharpa_toolbox.modules.core import DharpaModule
-from dharpa_toolbox.modules.utils import describe_module, find_all_module_classes
+from dharpa_toolbox.modules.utils import find_all_module_classes
 from dharpa_toolbox.modules.workflows import DharpaWorkflow
 from dharpa_toolbox.types.utils import (
     get_input_model_for_pydantic,
@@ -47,15 +49,21 @@ def create_processing_functions(cls: Type):
 
         return result
 
-    @with_signature(Signature(), func_name=f"describe_{obj.id}")
-    async def describe_func():
+    doc = obj.__doc__
+    if not doc:
+        doc = "-- no documentation available --"
+    doc = inspect.cleandoc(doc)
 
-        _obj: DharpaModule = cls()
+    doc = f"**Description**\n\n{doc}\n"
 
-        result = describe_module(_obj)
-        return result
+    if isinstance(obj, DharpaWorkflow) or issubclass(obj.__class__, DharpaWorkflow):
+        if hasattr(obj, "_workflow_config") and obj._workflow_config:  # type: ignore
+            content = yaml.dump(obj._workflow_config)  # type: ignore
+            doc = f"{doc}\n**Workflow config**\n\n```\n{content}\n```"
 
-    return func, describe_func, resp_model
+    func.__doc__ = doc
+
+    return func, resp_model
 
 
 def create_routers_from_modules() -> APIRouter:
@@ -74,7 +82,7 @@ def create_routers_from_modules() -> APIRouter:
         if name == "dharpa_workflow":
             continue
 
-        func, describe_func, resp_model = create_processing_functions(cls)
+        func, resp_model = create_processing_functions(cls)
         all_modules[name] = func
 
         is_workflow = True if issubclass(cls, DharpaWorkflow) else False

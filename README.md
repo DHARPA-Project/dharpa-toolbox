@@ -13,15 +13,6 @@
 Documentation still to be done.
 
 
-## Downloads
-
-### Binaries
-
-  - [Linux](https://s3-eu-west-1.amazonaws.com/dev.dl.frkl.io/linux-gnu/dharpa-toolbox)
-  - [Windows](https://s3-eu-west-1.amazonaws.com/dev.dl.frkl.io/windows/dharpa-toolbox.exe)
-  - [Mac OS X](https://s3-eu-west-1.amazonaws.com/dev.dl.frkl.io/darwin/dharpa-toolbox)
-
-
 # Development
 
 ## Requirements
@@ -69,16 +60,4 @@ For details (and other, minor targets), check the ``Makefile``.
 > make test
 # or
 > make coverage
-```
-
-
-## Update project template
-
-This project uses [cruft](https://github.com/timothycrosley/cruft) to apply updates to [the base Python project template](https://gitlab.com/frkl/template-python-project) to this repository. Check out it's documentation for more information.
-
-``` console
-cruft update
-# interactively approve changes, make changes if necessary
-git add *
-git commit -m "chore: updated project from template"
 ```
