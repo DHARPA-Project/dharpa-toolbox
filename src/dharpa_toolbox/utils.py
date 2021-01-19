@@ -7,7 +7,6 @@ __all__ = [
     "get_subclass_map",
     "get_snake_case_from_class",
     "to_camel_case",
-    "get_module_name_from_class",
     "graph_to_image",
     "log",
 ]
@@ -18,11 +17,16 @@ __all__ = [
 import collections.abc
 import importlib
 import inspect
+import json
 import logging
+import os
 import re
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Type, Union
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Set, Type, Union
 
 import networkx as nx
+import yaml
+from IPython.core.display import Markdown, display
 from IPython.display import Image
 
 
@@ -75,16 +79,16 @@ def get_all_subclasses(
     cls: Type,
     include_abstract_classes: bool = False,
     preload_modules: Union[Iterable[str], str, None] = None,
-):
+) -> Set[Type]:
 
     if preload_modules:
         load_modules(preload_modules)
 
-    all_subclasses = []
+    all_subclasses = set()
     for subclass in cls.__subclasses__():
         if not inspect.isabstract(subclass) or include_abstract_classes:
-            all_subclasses.append(subclass)
-        all_subclasses.extend(get_all_subclasses(subclass))
+            all_subclasses.add(subclass)
+        all_subclasses.update(get_all_subclasses(subclass))
 
     return all_subclasses
 
@@ -94,6 +98,7 @@ def get_subclass_map(
     include_abstract_classes: bool = False,
     preload_modules: Union[Iterable[str], str, None] = None,
     key_func: Optional[Callable] = None,
+    override_duplicate_class: bool = False,
 ) -> Mapping[str, Type]:
 
     if key_func is None:
@@ -108,7 +113,7 @@ def get_subclass_map(
     result: Dict[str, Type[Any]] = {}
     for sc in subclasses:
         key = key_func(sc)
-        if key in result.keys():
+        if key in result.keys() and not override_duplicate_class:
             raise Exception(f"Duplicate subclass key: {key}")
         result[key] = sc
 
@@ -144,14 +149,6 @@ def to_camel_case(snake_str, capitalize: bool = True):
     return result
 
 
-def get_module_name_from_class(cls: Type):
-
-    if hasattr(cls, "_module_name"):
-        return cls._module_name
-    else:
-        return get_snake_case_from_class(cls)
-
-
 def graph_to_image(graph: nx.Graph):
     try:
         import pygraphviz as pgv  # noqa
@@ -166,3 +163,46 @@ def graph_to_image(graph: nx.Graph):
     b = G.draw(format="png")
 
     return Image(b)
+
+
+def get_data_from_file(path: Union[str, Path]):
+
+    if isinstance(path, str):
+        path = Path(os.path.expanduser(path))
+
+    content = path.read_text()
+
+    if path.name.endswith(".json"):
+        content_type = "json\n"
+    elif path.name.endswith(".yaml") or path.name.endswith(".yml"):
+        content_type = "yaml\n"
+    else:
+        raise ValueError(
+            "Invalid data format, only 'json' or 'yaml' are supported currently."
+        )
+
+    if content_type == "json":
+        data = json.loads(content)
+    else:
+        data = yaml.safe_load(content)
+
+    return data
+
+
+def print_file_content(path: Union[str, Path]):
+
+    if isinstance(path, str):
+        path = Path(os.path.expanduser(path))
+
+    content = path.read_text()
+
+    if path.name.endswith(".json"):
+        content_type = "json\n"
+    elif path.name.endswith(".yaml") or path.name.endswith(".yml"):
+        content_type = "yaml\n"
+    else:
+        content_type = ""
+
+    md = Markdown(f"```{content_type}" + content + "```")
+
+    display(md)

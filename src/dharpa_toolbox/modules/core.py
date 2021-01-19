@@ -1,39 +1,40 @@
 # -*- coding: utf-8 -*-
 
-__all__ = [
-    "get_auto_module_id",
-    "ValueLocationType",
-    "ValueLocation",
-    "ModuleState",
-    "DharpaModule",
-    "EmptyObject",
-    "find_all_module_classes",
-]
-
 import logging
 import typing
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from typing import Mapping
 
-from traitlets import All, Bool, Dict, HasTraits, Instance
-
-from ..utils import get_module_name_from_class, get_subclass_map
+import traitlets
 
 
 log = logging.getLogger("dharpa-toolbox")
 
-_AUTO_MODULE_ID: Dict[typing.Type, int] = {}
+
+class EventManager(object):
+    def __init__(self):
+
+        self._output = None
+
+    def set_output(self, output):
+
+        self._output = output
+
+    def add_module_event(self, module: "DharpaModule", msg: str):
+
+        if not self._output:
+            log.info(f"Module event for '{module.id}': {msg}")
+            # print(f"Module event for '{module.id}': {msg}")
+
+        else:
+            # self._output.clear_output()
+            with self._output:
+
+                print(f"Module event for '{module.id}': {msg}")
 
 
-def get_auto_module_id(module_cls: typing.Type):
-
-    nr = _AUTO_MODULE_ID.setdefault(module_cls, 0)
-    _AUTO_MODULE_ID[module_cls] = nr + 1
-
-    name = get_module_name_from_class(module_cls)
-
-    return f"{name}_{nr}"
+GLOBAL_EVENT_MANAGER = EventManager()
 
 
 class ValueLocationType(Enum):
@@ -42,33 +43,48 @@ class ValueLocationType(Enum):
 
 
 class ValueLocation(typing.NamedTuple):
+
     module: "DharpaModule"
     value_name: str
-    type: ValueLocationType
+    direction: ValueLocationType
+
+    @property
+    def value_type(self) -> typing.Type[traitlets.Type]:
+
+        if self.direction == ValueLocationType.input:
+            container = self.module._state.inputs
+        else:
+            container = self.module._state.outputs
+
+        return container.traits()[self.value_name].__class__
 
     def __hash__(self):
 
-        return hash((self.module, self.value_name, self.type))
+        return hash((self.module, self.value_name, self.direction))
 
     def __eq__(self, other):
 
         if not isinstance(other, ValueLocation):
             return False
 
-        return (self.module, self.value_name, self.type) == (
+        return (self.module, self.value_name, self.direction) == (
             other.module,
             other.value_name,
-            other.type,
+            other.direction,
         )
+
+    def __repr__(self):
+
+        if self.direction == ValueLocationType.output:
+            t = "outputs"
+        else:
+            t = "inputs"
+        return f"ValueLocation({self.module.id}.{t}.{self.value_name})"
 
     def __str__(self):
 
-        if self.type == ValueLocationType.output:
+        if self.direction == ValueLocationType.output:
             t = f"{self.module.id} output"
-        elif self.type == ValueLocationType.workflow_input:
-            t = "user_input"
-        elif self.type == ValueLocationType.workflow_output:
-            t = "result"
         else:
             t = f"{self.module.id} input"
 
@@ -77,15 +93,15 @@ class ValueLocation(typing.NamedTuple):
         # return f"{self.module.id} {t}: {self.value_name}"
 
 
-class ModuleState(HasTraits):
+class ModuleState(traitlets.HasTraits):
 
-    config = Dict(allow_none=False)
+    config = traitlets.Dict(allow_none=False)
 
-    inputs = Instance(klass=HasTraits, allow_none=False)
-    outputs = Instance(klass=HasTraits, allow_none=False)
+    inputs = traitlets.Instance(klass=traitlets.HasTraits, allow_none=False)
+    outputs = traitlets.Instance(klass=traitlets.HasTraits, allow_none=False)
 
-    stale = Bool(default_value=True)
-    busy = Bool(default_value=False)
+    stale = traitlets.Bool(default_value=True)
+    busy = traitlets.Bool(default_value=False)
 
 
 class DharpaModule(metaclass=ABCMeta):
@@ -93,6 +109,8 @@ class DharpaModule(metaclass=ABCMeta):
 
         _id = config.pop("id", None)
         if _id is None:
+            from .utils import get_auto_module_id
+
             _id = get_auto_module_id(self.__class__)
 
         if "." in _id:
@@ -129,11 +147,11 @@ class DharpaModule(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _create_inputs(self, **config) -> HasTraits:
+    def _create_inputs(self, **config) -> traitlets.HasTraits:
         pass
 
     @abstractmethod
-    def _create_outputs(self, **config) -> HasTraits:
+    def _create_outputs(self, **config) -> traitlets.HasTraits:
         pass
 
     def set_config(self, **config: typing.Any):
@@ -190,18 +208,18 @@ class DharpaModule(metaclass=ABCMeta):
         new_input_locations = {}
         for name in self._state.inputs.trait_names():
             new_input_locations[name] = ValueLocation(
-                module=self, value_name=name, type=ValueLocationType.input
+                module=self, value_name=name, direction=ValueLocationType.input
             )
         self._input_locations = new_input_locations
         new_output_locations = {}
         for name in self._state.outputs.trait_names():
             new_output_locations[name] = ValueLocation(
-                module=self, value_name=name, type=ValueLocationType.output
+                module=self, value_name=name, direction=ValueLocationType.output
             )
         self._output_locations = new_output_locations
 
         # listen to events where inputs are set
-        self._state.inputs.observe(self._input_updated, names=All)
+        self._state.inputs.observe(self._input_updated, names=traitlets.All)
         # set the initial state of this module where there is no input yet to 'stale'
         self._state.stale = True
 
@@ -236,15 +254,19 @@ class DharpaModule(metaclass=ABCMeta):
 
         return self._input_locations[value_name]
 
+    @property
+    def input_locations(self) -> Mapping[str, ValueLocation]:
+
+        return {name: self.get_input_location(name) for name in self.input_names}
+
     def get_output_location(self, value_name: str) -> ValueLocation:
         """Retrieve an output value wrapping object from a string."""
 
         return self._output_locations[value_name]
 
-    # @property
-    # def inputs(self) -> HasTraits:
-    #
-    #     return self._state.inputs
+    def output_locations(self) -> Mapping[str, ValueLocation]:
+
+        return {name: self.get_output_location(name) for name in self.output_names}
 
     def set_input(self, input_name: str, value: typing.Any) -> None:
         """Set an input value of this module.
@@ -254,20 +276,15 @@ class DharpaModule(metaclass=ABCMeta):
             value (Any): the value
         """
 
-        print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-        print(self)
-        print(self._state.inputs.trait_names())
-
         self._state.inputs.set_trait(input_name, value)
 
-    # @property
-    # def outputs(self) -> HasTraits:
-    #
-    #     return self._state.outputs
+    def get_output(self, output_name: str) -> typing.Any:
+
+        return getattr(self._state.outputs, output_name)
 
     def _input_updated(self, change) -> typing.Any:
 
-        log.debug(f"Input updated for module ({self.id}): {change}")
+        self._add_module_event(f"Input '{change.name}' updated")
 
         if change.name not in self._input_staging.keys():
             self._input_staging[change.name] = {"old": change.old, "new": change.new}
@@ -275,11 +292,14 @@ class DharpaModule(metaclass=ABCMeta):
             self._input_staging[change.name]["new"] = change.new
         self._state.stale = True
 
-    def process(self):
+    def process(self) -> None:
         """Process this modules current inputs."""
 
-        self._state.busy = True  # if not self._stale_state:
-        #     return
+        if not self._state.stale:
+            return
+
+        self._state.busy = True
+        self._add_module_event("Processing started.")
 
         try:
 
@@ -290,10 +310,8 @@ class DharpaModule(metaclass=ABCMeta):
 
             result = self._process(**current)
 
-            # print("RESULT")
-            # print(result)
-            self._inputs_current.clear()
-            self._inputs_current.update(current)
+            self._input_current.clear()
+            self._input_current.update(current)
 
             self._input_staging.clear()
 
@@ -303,13 +321,17 @@ class DharpaModule(metaclass=ABCMeta):
 
                         if k not in self._state.outputs.trait_names():
                             continue
+                        self._add_module_event(f"Setting output value: {k}")
                         self._state.outputs.set_trait(k, v)
                 self._state.stale = False
 
-        # except Exception as e:
-        #     raise
+        except Exception as e:
+            self._add_module_event(f"Processing finished (failed): {e}")
+            raise e
         finally:
             self._state.busy = False
+
+        self._add_module_event("Processing finished (success).")
 
     @property
     def id(self) -> str:
@@ -324,13 +346,13 @@ class DharpaModule(metaclass=ABCMeta):
         return self._state.busy
 
     @property
-    def state(self) -> HasTraits:
+    def state(self) -> traitlets.HasTraits:
         return self._state
 
     @property
     def current_state(self) -> typing.Dict[str, typing.Any]:
 
-        result: Dict[str, typing.Any] = {"inputs": {}, "outputs": {}}
+        result: typing.Dict[str, typing.Any] = {"inputs": {}, "outputs": {}}
         for tn in self._state.inputs.trait_names():
             stale = False
             result["inputs"][tn] = {}
@@ -356,11 +378,15 @@ class DharpaModule(metaclass=ABCMeta):
     @property
     def input_names(self) -> typing.Iterable[str]:
 
-        return self._state.inputs.trait_names()
+        return sorted(self._state.inputs.trait_names())
 
     @property
     def output_names(self) -> typing.Iterable[str]:
-        return self._state.outputs.trait_names()
+        return sorted(self._state.outputs.trait_names())
+
+    def _add_module_event(self, msg: str):
+
+        GLOBAL_EVENT_MANAGER.add_module_event(self, msg)
 
     def __eq__(self, other):
 
@@ -382,24 +408,9 @@ class DharpaModule(metaclass=ABCMeta):
         return f"module: '{self.id}'"
 
 
-class EmptyObject(HasTraits):
+class EmptyObject(traitlets.HasTraits):
 
     pass
 
 
 # Cell
-
-
-def find_all_module_classes():
-    modules_to_load = [
-        "dharpa_toolbox.modules.core",
-        "dharpa_toolbox.modules.files",
-        "dharpa_toolbox.modules.text",
-    ]
-
-    all_module_clases = get_subclass_map(
-        DharpaModule,
-        preload_modules=modules_to_load,
-        key_func=get_module_name_from_class,
-    )
-    return all_module_clases

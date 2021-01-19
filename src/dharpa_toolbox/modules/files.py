@@ -3,9 +3,10 @@
 import collections
 import os
 import typing
+from pathlib import Path
 
 import traitlets
-from traitlets import Bytes, HasTraits, Instance, Integer, Unicode
+from traitlets import Bytes, HasTraits, Integer, Unicode
 
 from .core import DharpaModule
 
@@ -14,13 +15,19 @@ class DharpaFile(HasTraits):
     @classmethod
     def create(self, data):
 
+        if isinstance(data, Path):
+            data = data.as_posix()
+
         if isinstance(data, str):
 
             if os.path.exists(os.path.expanduser(data)):
+                data = os.path.expanduser(data)
                 name = os.path.basename(data)
                 size = os.path.getsize(data)
                 f_type = None
                 last_modified = int(os.path.getmtime(data))
+                with open(data, "rb") as f:
+                    content = f.read()
             else:
                 raise NotImplementedError()
         else:
@@ -53,14 +60,23 @@ class DharpaFile(HasTraits):
                     size = data["metadata"]["size"]
                     f_type = data["metadata"].get("type", None)
                     last_modified = data["metadata"]["lastModified"]
+
                 else:
                     raise ValueError(f"Can't parse dict to file object: {data}")
+
+                content = data["content"]
             else:
                 raise TypeError(
                     f"Can't create file object: invalid input type '{type(data)}'"
                 )
 
-        f = DharpaFile(name=name, size=size, type=f_type, last_modified=last_modified)
+        f = DharpaFile(
+            name=name,
+            size=size,
+            type=f_type,
+            last_modified=last_modified,
+            content=content,
+        )
         return f
 
     name = Unicode()
@@ -88,7 +104,7 @@ class DharpaFiles(object):
         if not data:
             return DharpaFiles()
 
-        if isinstance(data, str):
+        if isinstance(data, (str, Path)):
             data = [data]
 
         if isinstance(data, collections.abc.Mapping):
@@ -134,9 +150,9 @@ class FileSetValue(HasTraits):
     file_set = traitlets.Instance(klass=DharpaFiles, allow_none=True)
 
 
-class FilesCollectionModule(DharpaModule):
+class ReadFilesModule(DharpaModule):
 
-    _module_name = "files_collection"
+    _module_name = "file_reader"
 
     def _create_inputs(self, **config) -> HasTraits:
         class FilesCollectionValueInput(HasTraits):
@@ -145,56 +161,16 @@ class FilesCollectionModule(DharpaModule):
         return FilesCollectionValueInput()
 
     def _create_outputs(self, **config) -> HasTraits:
+        class ReadFilesValueOutput(HasTraits):
+            content_map = traitlets.Dict(key_trait=Unicode(), value_trait=Unicode())
 
-        return FileSetValue()
+        return ReadFilesValueOutput()
 
     def _process(self, files):
 
         d_files = DharpaFiles.create(files)
-        return {"file_set": d_files}
+        text_map = {}
+        for f in d_files.files:
+            text_map[f.name] = f.content.decode("utf-8")
 
-
-class TextCorpus(object):
-    def __init__(self, file_set: DharpaFiles):
-
-        self._file_set: DharpaFiles = file_set
-
-        self._corpus: typing.Mapping[str, str] = None  # type: ignore
-
-    def file_set(self) -> DharpaFiles:
-        return self._file_set
-
-    def corpus(self) -> typing.Mapping[str, str]:
-
-        if self._corpus is not None:
-            return self._corpus
-
-        self._corpus = {}
-        for f in self._file_set.files:
-            self._corpus[f.name] = f.content
-
-        return self._corpus
-
-
-class TextCorpusValue(HasTraits):
-
-    text_corpus = Instance(klass=TextCorpus)
-
-
-class CorpusFromFiles(DharpaModule):
-
-    _module_name = "corpus_from_files"
-
-    def _create_inputs(self, **config) -> HasTraits:
-
-        return FileSetValue()
-
-    def _create_outputs(self, **config) -> HasTraits:
-
-        return TextCorpusValue()
-
-    def _process(self, **inputs) -> typing.Mapping[str, typing.Any]:
-
-        file_set: DharpaFiles = inputs["file_set"]
-        result = TextCorpus(file_set=file_set)
-        return {"text_corpus": result}
+        return {"content_map": text_map}

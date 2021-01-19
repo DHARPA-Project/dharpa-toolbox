@@ -5,19 +5,19 @@ __all__ = ["DharpaWorkflow"]
 # Cell
 import collections.abc
 import copy
+import json
 import logging
+import os
 import typing
 from functools import partial
+from pathlib import Path
 from typing import Mapping
 
 import networkx as nx
+import yaml
 from bidict import bidict
-from dharpa_toolbox.modules.core import (
-    DharpaModule,
-    ValueLocation,
-    ValueLocationType,
-    find_all_module_classes,
-)
+from dharpa_toolbox.modules.core import DharpaModule, ValueLocation, ValueLocationType
+from dharpa_toolbox.modules.utils import find_all_module_classes
 from dharpa_toolbox.utils import to_camel_case
 from traitlets import HasTraits
 
@@ -28,6 +28,33 @@ log = logging.getLogger("dharpa-toolbox")
 
 
 class DharpaWorkflow(DharpaModule):
+    @classmethod
+    def from_file(cls, path: typing.Union[str, Path], id: typing.Optional[str] = None):
+
+        if isinstance(path, str):
+            path = Path(os.path.expanduser(path))
+
+        content = path.read_text()
+
+        if path.name.endswith(".json"):
+            content_type = "json"
+        elif path.name.endswith(".yaml") or path.name.endswith(".yml"):
+            content_type = "yaml"
+        else:
+            raise ValueError(
+                "Invalid file format, only 'json' and 'yaml' supported for now."
+            )
+
+        if content_type == "json":
+            config = json.loads(content)
+        else:
+            config = yaml.safe_load(content)
+
+        if id:
+            config["id"] = id
+
+        return DharpaWorkflow(**config)
+
     def __init__(self, **config: typing.Any):
 
         self._module_details: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
@@ -41,7 +68,7 @@ class DharpaWorkflow(DharpaModule):
         self._workflow_inputs: bidict[ValueLocation, ValueLocation] = None  # type: ignore
         """A map of all this workflows inputs (all inputs that are not connected to other modules outputs."""
         self._workflow_outputs: bidict[ValueLocation, ValueLocation] = None  # type: ignore
-        """A map of all this workflows outputs (all outputs that are mentioned in the 'workflow_output' config section
+        """A map of all this workflows outputs (all outputs that are mentioned in the 'workflow_outputs' config section
         of a module."""
 
         self._execution_stages: typing.Iterable[typing.Iterable[DharpaModule]] = None  # type: ignore
@@ -49,37 +76,84 @@ class DharpaWorkflow(DharpaModule):
 
         super().__init__(**config)
 
-    def _module_input_updated(self, change) -> typing.Any:
+    def _workflow_input_updated(
+        self, workflow_input: ValueLocation, change
+    ) -> typing.Any:
 
-        print("INPUT UPDATED")
+        assert workflow_input.direction == ValueLocationType.input
 
-        log.debug(f"Input updated for workflow ({self.id}): {change}")
+        self._add_module_event(
+            f"Input updated for workflow: {workflow_input.value_name}"
+        )
 
-        if change.name not in self._input_staging.keys():
-            self._input_staging[change.name] = {"old": change.old, "new": change.new}
-        else:
-            self._input_staging[change.name]["new"] = change.new
-
-        input_loc = self._workflow_inputs[change.name]
+        input_loc = self._workflow_inputs[workflow_input]
         module_obj = input_loc.module
         input_name = input_loc.value_name
+
+        self._add_module_event(
+            f"forwarding workflow input '{workflow_input.value_name}' to internal module input: {module_obj.id}.{input_name}"
+        )
 
         trait = module_obj._state.inputs.traits().get(input_name)
         trait.set(module_obj._state.inputs, change.new)
 
         module_obj.process()
 
-        self._check_stale()
+        self._is_stale()
 
-    def _module_output_updated(
-        self, module_output: ValueLocation, change: Mapping
-    ) -> None:
+    def _module_output_updated(self, module_output: ValueLocation, change) -> None:
 
-        assert module_output.type == ValueLocationType.output
+        assert module_output.direction == ValueLocationType.output
 
-        print(f"OUTPUT_UPDATED: {module_output}")
+        self._add_module_event(f"Internal module output updated: {module_output}")
         out_edges = self.data_flow_graph.out_edges(module_output)
-        print(f"Updating: {out_edges}")
+        modules_to_process: typing.Set[DharpaModule] = set()
+        workflow_outputs_to_set: typing.Set[ValueLocation] = set()
+        updated_edges: typing.Set[str] = set()
+        for oe in out_edges:
+            target: ValueLocation = oe[1]
+
+            if target.module == self:
+                workflow_outputs_to_set.add(target)
+            elif target.direction == ValueLocationType.input:
+                updated_edges.add(str(target))
+
+                target.module.set_input(target.value_name, change.new)
+                modules_to_process.add(target.module)
+            elif target.direction == ValueLocationType.output and (
+                isinstance(target.module, DharpaWorkflow)
+                or issubclass(target.module.__class__, DharpaWorkflow)
+            ):
+                raise NotImplementedError()
+                # setting workflow output
+                workflow_outputs_to_set.add(target)
+                # target.module._workflow_output_updated(workflow_output=target, module_output=module_output, change=change)
+            else:
+                raise Exception("Invalid value location")
+
+        self._add_module_event(
+            f"Updated out edges of module output '{module_output}': {updated_edges}"
+        )
+        self._add_module_event(
+            f"Processing changed modules: {', '.join((str(m) for m in modules_to_process))}"
+        )
+
+        for m in modules_to_process:
+            m.process()
+
+        self._add_module_event("Proceesing of changed modules finished.")
+
+        self._is_stale()
+
+        for target in workflow_outputs_to_set:
+            self._add_module_event(f"Setting workflow target output: {target}")
+            source = self._workflow_outputs[target]
+            target.module._state.outputs.set_trait(
+                target.value_name, source.module.get_output(source.value_name)
+            )
+
+            # target_value = oe[1].module
+
         # print("OUT EDGES")
         # for oe in out_edges:
         #     target_module = oe[1].module
@@ -88,34 +162,43 @@ class DharpaWorkflow(DharpaModule):
         #     print(workflow_output)
         # target_module.set_input(target_value, change.new)
 
-        workflow_output = self._workflow_outputs.inverse.get(module_output, None)
-        if workflow_output:
-            self._workflow_output_updated(
-                workflow_output=workflow_output,
-                module_output=module_output,
-                change=change,
-            )
+        # workflow_output = self._workflow_outputs.inverse.get(module_output, None)
+        # if workflow_output:
+        #     self._workflow_output_updated(
+        #         workflow_output=workflow_output,
+        #         module_output=module_output,
+        #         change=change,
+        #     )
 
-    def _workflow_output_updated(
-        self, workflow_output: ValueLocation, module_output: ValueLocation, change
-    ):
+    def _is_stale(self) -> bool:
 
-        log.debug(f"Workflow output '{module_output}' updated: {change.new}")
-        print(f"Workflow output '{module_output}' updated: {change.new}")
+        for module in self.modules.values():
+            if module.stale:
+                self._state.stale = True
+                return True
 
-        # if self._state.busy:
-        #     means the workflow is currently processing
-        # pass
+            # for target, source in self._workflow_outputs.items():
+            #     target.module.set_input(target.value_name, getattr(source.module.output_names, source.value_name))
+
+        self._state.stale = False
+        return False
+
+    # def _workflow_output_updated(
+    #     self, workflow_output: ValueLocation, module_output: ValueLocation, change
+    # ):
+    #
+    #     self._add_module_event(f"Output '{change.name}' for internal module '{module_output}' updated, setting workflow output '{workflow_output}'")
+    #     workflow_output.module._state.outputs.set_trait(workflow_output.value_name, change.new)
+    #
+    #     # if self._state.busy:
+    #         # means the workflow is currently processing
+    #     # pass
 
     def _preprocess_config(self, **config: typing.Any):
         """The core method of a workflow, this connects all the modules, their inputs and outputs.
 
         TODO: details
         """
-
-        modules = config.get("modules", None)
-        if not modules:
-            raise ValueError("Can't create workflow: no modules specified")
 
         # the first time this is run is different, because it is allowed for modules to not have an id (one will
         # be assigned automatically if missing)
@@ -133,6 +216,11 @@ class DharpaWorkflow(DharpaModule):
 
         self._execution_stages = []
 
+        modules = config.get("modules", None)
+        if not modules:
+            # raise ValueError("Can't create workflow: no modules specified")
+            return {}
+
         module_ids = set()
 
         m: typing.Dict[str, typing.Any]
@@ -143,7 +231,7 @@ class DharpaWorkflow(DharpaModule):
             module_id = m.get("id", None)
             module_input_map = m.get("input_map", {})
             # TODO: auto-fill all module outputs (and generate names automatically) if no 'workflow_output' is specified
-            workflow_output_map = m.get("workflow_output", {})
+            workflow_output_map = m.get("workflow_outputs", {})
 
             # retrieve the module class
             if isinstance(module_type, str):
@@ -204,14 +292,35 @@ class DharpaWorkflow(DharpaModule):
                 #       module name to connect to, and the 2nd one the name of the output name to connect to
                 mapped_input_raw = module_input_map.get(name, None)
                 if mapped_input_raw is None:
-                    workflow_input_name = f"{module_id}__{name}"
-                    mapped_input = {"value_name": workflow_input_name}
+                    _output_name = f"{module_id}__{name}"
+                    mapped_input = {"workflow_input": _output_name}
                 elif isinstance(mapped_input_raw, str):
-                    mapped_input = {"module": mapped_input_raw, "value_name": name}
+
+                    tokens = mapped_input_raw.split(".")
+                    if len(tokens) != 2:
+                        raise ValueError(
+                            f"Can't parse mapped output '{mapped_input_raw}': only one seperator '.' allowed"
+                        )
+                    if "." in mapped_input_raw:
+                        if (
+                            tokens[0] == "workflow_input"
+                            or tokens[0] == "__workflow_input__"
+                        ):
+                            mapped_input = {"workflow_input": tokens[1]}
+                        else:
+                            mapped_input = {
+                                "module": tokens[0],
+                                "output_name": tokens[1],
+                            }
+                    else:
+                        mapped_input = {"module": mapped_input_raw, "output_name": name}
                 elif isinstance(mapped_input_raw, collections.abc.Mapping):
                     mapped_input = dict(mapped_input_raw)
-                    if "value_name" not in mapped_input:
-                        mapped_input["value_name"] = name
+                    if (
+                        "output_name" not in mapped_input.keys()
+                        and "module" in mapped_input.keys()
+                    ):
+                        mapped_input["output_name"] = name
 
                 elif (
                     isinstance(mapped_input_raw, collections.abc.Iterable)
@@ -231,7 +340,16 @@ class DharpaWorkflow(DharpaModule):
                 #  - if no 'value_name' key is present, the input name will be used
                 #  - if not 'module' key is present, the workflow will be connected to this input, not another module
                 if mapped_input.get("module", None) is None:
-                    workflow_input_name = mapped_input["value_name"]
+
+                    workflow_input_name = mapped_input.get("workflow_input", None)
+
+                    assert workflow_input_name is not None
+                    value_name = mapped_input.get("output_name", None)
+
+                    if value_name:
+                        raise ValueError(
+                            f"Input map in workflow '{self.id}' for item '{name}' has no 'module' key, but 'output_name', this is not allowed: {mapped_input}"
+                        )
 
                     if workflow_input_name in self._workflow_inputs.keys():
                         raise ValueError(
@@ -241,14 +359,18 @@ class DharpaWorkflow(DharpaModule):
                     wi = ValueLocation(
                         module=self,
                         value_name=workflow_input_name,
-                        type=ValueLocationType.input,
+                        direction=ValueLocationType.input,
                     )
                     module_full_input_map[name] = wi
                     vl = ValueLocation(
                         module=module_obj,
                         value_name=name,
-                        type=ValueLocationType.input,
+                        direction=ValueLocationType.input,
                     )
+                    if wi in self._workflow_inputs.keys():
+                        raise Exception(
+                            f"Duplicate input name for workflow: {wi.value_name}"
+                        )
                     self._workflow_inputs[wi] = vl
                     # all_outputs_map.setdefault(self.id, {})[workflow_input_name] = vl
                     self.data_flow_graph.add_edge(wi, vl)
@@ -256,17 +378,28 @@ class DharpaWorkflow(DharpaModule):
                     self.data_flow_graph.add_edge(vl, module_obj)
                 else:
 
+                    workflow_input_name = mapped_input.get("workflow_input", None)
+
+                    if workflow_input_name:
+                        raise ValueError(
+                            f"Input map in workflow '{self.id}' for item '{name}' contains 'module' key, but also 'workflow_input', this is not allowed: {mapped_input}"
+                        )
+
+                    value_name = mapped_input.get("output_name", None)
+
+                    assert value_name is not None
+
                     # TODO: check format of mapped_input
                     o1 = ValueLocation(
                         module=self.get_module(mapped_input["module"]),
-                        value_name=mapped_input["value_name"],
-                        type=ValueLocationType.output,
+                        value_name=value_name,
+                        direction=ValueLocationType.output,
                     )
                     module_full_input_map[name] = o1
                     i1 = ValueLocation(
                         module=module_obj,
                         value_name=name,
-                        type=ValueLocationType.input,
+                        direction=ValueLocationType.input,
                     )
 
                     self.data_flow_graph.add_edge(o1.module, o1)
@@ -290,15 +423,15 @@ class DharpaWorkflow(DharpaModule):
                     self._execution_graph.add_edge(loc.module, module_obj)
 
             # map outputs to workflow output, and subscribe to module output value changes
-            for output_name in module_obj.outputs.trait_names():
+            for output_name in module_obj._state.outputs.trait_names():
 
                 mo = ValueLocation(
                     module=module_obj,
                     value_name=output_name,
-                    type=ValueLocationType.output,
+                    direction=ValueLocationType.output,
                 )
                 update_func = partial(self._module_output_updated, mo)
-                module_obj.outputs.observe(update_func, names=output_name)
+                module_obj._state.outputs.observe(update_func, names=output_name)
 
                 output_details_raw = workflow_output_map.get(output_name, None)
 
@@ -309,9 +442,13 @@ class DharpaWorkflow(DharpaModule):
 
                     wo = ValueLocation(
                         module=self,
-                        value_name=output_name,
-                        type=ValueLocationType.output,
+                        value_name=output_details_raw,
+                        direction=ValueLocationType.output,
                     )
+                    if wo in self._workflow_outputs.keys():
+                        raise Exception(
+                            f"Duplicate output name for workflow: {wo.value_name}"
+                        )
                     self._workflow_outputs[wo] = mo
 
                     self.data_flow_graph.add_edge(module_obj, mo)
@@ -353,16 +490,21 @@ class DharpaWorkflow(DharpaModule):
 
         return self._data_flow_graph
 
+    @property
+    def execution_stages(self) -> typing.Iterable[typing.Iterable[DharpaModule]]:
+
+        return self._execution_stages
+
     def _create_inputs(self, **config) -> HasTraits:
 
         traits = {}
 
         for workflow_input, module_input in self._workflow_inputs.items():
 
-            assert module_input.type == ValueLocationType.input
+            assert module_input.direction == ValueLocationType.input
 
-            m: DharpaModule = module_input[0]
-            trait_name = module_input[1]
+            m: DharpaModule = module_input.module
+            trait_name = module_input.value_name
             trait = m._state.inputs.traits().get(trait_name)
 
             traits[workflow_input.value_name] = copy.deepcopy(trait)
@@ -373,7 +515,17 @@ class DharpaWorkflow(DharpaModule):
             (HasTraits,),
             traits,
         )
-        return inputs_cls()
+
+        inputs: HasTraits = inputs_cls()
+
+        for workflow_input in self._workflow_inputs.keys():
+            _m: DharpaModule = workflow_input.module
+            assert _m == self
+
+            func = partial(self._workflow_input_updated, workflow_input)
+            inputs.observe(func, names=workflow_input.value_name)
+
+        return inputs
 
     def _create_outputs(self, **config) -> HasTraits:
 
@@ -381,7 +533,7 @@ class DharpaWorkflow(DharpaModule):
 
         for workflow_output, module_output in self._workflow_outputs.items():
 
-            assert module_output.type == ValueLocationType.output
+            assert module_output.direction == ValueLocationType.output
 
             module = module_output.module
             output_name = module_output.value_name
@@ -423,96 +575,27 @@ class DharpaWorkflow(DharpaModule):
 
         return self._module_details.keys()
 
-    def _check_stale(self):
-
-        for m in self._module_details.values():
-            if m["module"].stale:
-                self._state.stale = True
-                return True
-
-        self._state.stale = False
-        return False
-
-    # def _module_input_updated(self, source_module: DharpaModule, source_input_name: str, change):
-    #
-    #     print(f"MODULE INPUT UPDATED: {source_module} - {source_input_name}")
-    #
-    #     # raise Exception(change)
-    #
-    #     # print("-------------------")
-    #     # print(f"MODULE INPUT UPDATED: {source_module}")
-    #     # print(f"INPUT NAME: {source_input_name}")
-    #     # # print(change)
-    #     # # print(change.new)
-    #     # print("-------------------")
-    #     self._state.stale = True
-    #     # deps = self.dependencies.get(source_module.id)
-    #     # print(f"Dependencies: {self.dependencies.get(source_module.id)}")
-    #     # for d in deps:
-    #     #     dep_module = self.get_module(d)
-    #     #     print(dep_module.input_mapping)
-    #
-    #     # source_module.process()
-    #
-    #
-    # def _module_output_updated(self, source_module: DharpaModule, source_output_name: str, change):
-    #
-    #     print(f"MODULE OUTPUT UPDATED: {source_module} - {source_output_name}")
-
     def _process(self, **inputs) -> Mapping[str, typing.Any]:
 
         modules_executed: typing.Set[DharpaModule] = set()
 
         for i, modules_to_execute in enumerate(self._execution_stages):
 
-            print(f"Executing level: {i+1}")
+            # print(f"Executing level: {i+1}")
             for m in modules_to_execute:
-                print(f"Executing: {m}")
+                # print(f"Executing: {m}")
                 with m._state.outputs.hold_trait_notifications():
                     m.process()
 
-                # for output_name in m.outputs.trait_names():
-                #
-                #     print(f"Setting output: {output_name}")
-                #     value = getattr(m.outputs, output_name)
-                #     print(f"Value: {value}")
-                # value_location = ValueLocation(module=m, value_name=output_name, type=ValueLocationType.module_output)
-                # desc = self.data_flow_graph.out_edges(value_location)
-                # print(f"Descendants:")
-                # for d in desc:
-                #     target_loc = d[1]
-                #     if target_loc.type == ValueLocationType.module_input:
-                #         target_module: DharpaModule = target_loc.module
-                #         target_value_name: str = target_loc.value_name
-                #         target_module.inputs.set_trait(target_value_name, value)
-                #         print(f"TARGET: {target_loc}")
-                print("-------")
-
             modules_executed.update(modules_to_execute)
 
-            # for m in modules_to_execute:
-            #     deps = self._dependencies.get(m)
-            #     for d in deps:
-            #         if d in modules_executed:
-            #             raise Exception(f"Can't set dependency value from {m} to {d}: module {d} already executed")
-            #         print(f"ADDING INPUT FROM {m} TO {d}")
+        stale = self._is_stale()
+        assert not stale
 
-        # print("Executing workflow")
-        # print("----------------")
-        # print("dependencies:")
-        # print(self._dependencies)
-        # print("----------------")
-        # print("dependencies reverse:")
-        # print(self._dependencies_reverse)
-        #
-        # print(self.modules)
-
-        self._check_stale()
         self._state.busy = False
-
-        # TODO: fill in actual workflow_outputs
-
-        return {}
+        # since we already updated the workflow outputs via the event system, we can skip the parent output
+        # update mechanism here
+        return None  # type: ignore
 
     # def add_module(self, module: DharpaModule):
     #
