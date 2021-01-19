@@ -58,6 +58,14 @@ class ValueLocation(typing.NamedTuple):
 
         return container.traits()[self.value_name].__class__
 
+    @property
+    def value(self) -> typing.Any:
+
+        if self.direction == ValueLocationType.input:
+            return getattr(self.module._state.inputs, self.value_name)
+        else:
+            return getattr(self.module._state.outputs, self.value_name)
+
     def __hash__(self):
 
         return hash((self.module, self.value_name, self.direction))

@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 import typer
-from dharpa_toolbox.modules.utils import (
-    create_module,
-    list_available_module_names,
-    load_workflows,
-)
+from dharpa_toolbox.modules.utils import list_available_module_names, load_workflows
 from dharpa_toolbox.rendering.cli import create_typers_from_modules
-from dharpa_toolbox.types.utils import get_input_python_types
+from dharpa_toolbox.rendering.jupyter.utils import find_all_item_widget_classes
 from rich import print
 
 
@@ -31,15 +27,8 @@ def list_modules():
 @app.command()
 def test():
 
-    module_name = "corpus_processing"
-    module_obj = create_module(module_name)
-
-    import pp
-
-    pp(module_obj.__dict__)
-
-    types = get_input_python_types(module_obj)
-    print(types)
+    classes = find_all_item_widget_classes()
+    print(classes)
 
 
 exec_typer = create_typers_from_modules()

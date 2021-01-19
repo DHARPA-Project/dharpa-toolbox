@@ -48,7 +48,7 @@ def find_all_module_classes():
     return all_module_clases
 
 
-def create_module(module: Union[str, Type]):
+def create_module(module: Union[str, Type]) -> DharpaModule:
 
     if isinstance(module, str):
         module_cls = find_all_module_classes().get(module, None)
