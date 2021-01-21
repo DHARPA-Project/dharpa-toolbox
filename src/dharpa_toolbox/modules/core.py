@@ -290,6 +290,13 @@ class DharpaModule(metaclass=ABCMeta):
 
         return getattr(self._state.outputs, output_name)
 
+    def get_outputs(self) -> typing.Dict[str, typing.Any]:
+
+        result = {}
+        for k, v in self.output_locations().items():
+            result[k] = v.value
+        return result
+
     def _input_updated(self, change) -> typing.Any:
 
         self._add_module_event(f"Input '{change.name}' updated")

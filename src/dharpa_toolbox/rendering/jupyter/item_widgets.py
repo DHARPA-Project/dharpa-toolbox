@@ -8,6 +8,7 @@ from datetime import datetime
 from functools import partial
 from typing import Any, Dict, Iterable, Mapping
 
+import pandas
 import rich
 from dharpa_toolbox.modules.core import ValueLocationType
 from dharpa_toolbox.modules.workflows import ValueLocation
@@ -259,6 +260,16 @@ class GenericViewer(ItemWidget):
         output = Output()
         return output
 
+    def print_item(self, item: Any):
+
+        print(len(item))
+        for k, v in item.items():
+            v = ", ".join(v)
+            if len(v) >= 140:
+                v = v[0:137] + "..."
+            print(f"{k} - {v}")
+            print()
+
     def output_value_changed(self, item_name: str, change):
 
         self.widget.clear_output()
@@ -266,7 +277,7 @@ class GenericViewer(ItemWidget):
         with self.widget:
             rich.jupyter.print(f"Updated: {datetime.now()}")
 
-            rich.jupyter.print(change.new)
+            self.print_item(change.new)
 
 
 class FileSetTable(ItemWidget):
@@ -285,13 +296,56 @@ class FileSetTable(ItemWidget):
 
         with self.widget:
 
-            files = change.new
+            texts = change.new
+            data = []
+            index = []
 
-            for id, text in files.items():
-                _t = str(text)
-                if len(_t) > 53:
-                    _t = _t[0:50] + "..."
-                print(f"{id}: {_t}")
+            for id, text in texts.items():
+                _t = ", ".join(text)
+
+                # if len(_t) > 100:
+                #     _t = _t[0:97] + "..."
+
+                data.append([_t])
+                index.append(id)
+
+            df = pandas.DataFrame(data, columns=["text"], index=index)
+
+            print(df)
+
+
+class SelectionFileSetTable(ItemWidget):
+    def _create_widget(
+        self,
+        input_items: Mapping[str, ValueLocation],
+        output_items: Mapping[str, ValueLocation],
+    ) -> Widget:
+
+        output = Output()
+        return output
+
+    def output_value_changed(self, item_name: str, change):
+
+        self.widget.clear_output()
+
+        with self.widget:
+
+            texts = change.new
+            data = []
+            index = []
+
+            for id, text in texts.items():
+                _t = ", ".join(text)
+
+                # if len(_t) > 100:
+                #     _t = _t[0:97] + "..."
+
+                data.append([_t])
+                index.append(id)
+
+            df = pandas.DataFrame(data, columns=["text"], index=index)
+
+            print(df)
 
 
 # class TextCorpusViewer(ItemWidget):
