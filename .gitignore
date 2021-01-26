@@ -57,3 +57,6 @@ site
 .env
 docs/api-documentation.md
 dev/presentation.ipynb
+
+examples/data/data_tm_workflow
+dev.bak
