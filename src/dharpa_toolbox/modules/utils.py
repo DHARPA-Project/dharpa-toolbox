@@ -14,6 +14,10 @@ from dharpa_toolbox.utils import (
 from rich.jupyter import print as rich_print
 
 
+if typing.TYPE_CHECKING:
+    from dharpa_toolbox.modules.workflows import DharpaWorkflow
+
+
 _AUTO_MODULE_ID: typing.Dict[typing.Type, int] = {}
 
 VALID_WORKFLOW_FILE_EXTENSIONS = ["yaml", "yml", "json"]
@@ -64,6 +68,17 @@ def create_module(module: Union[str, Type]) -> DharpaModule:
     module_obj = module_cls()
 
     return module_obj
+
+
+def create_workflow(workflow: Union[str, Type]) -> "DharpaWorkflow":
+    from dharpa_toolbox.modules.workflows import DharpaWorkflow
+
+    w = create_module(workflow)
+
+    if not isinstance(w, DharpaWorkflow):
+        raise Exception(f"Not a workflow: {w}")
+
+    return w
 
 
 def generate_workflow_class_from_file(path: Union[str, Path]):

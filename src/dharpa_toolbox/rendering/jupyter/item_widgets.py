@@ -118,10 +118,16 @@ class ItemWidget(metaclass=ABCMeta):
             input_items=self._input_items, output_items=self._output_items
         )
 
+        self._post_create()
+
         for name, loc in self._input_items.items():
             func = partial(self.set_input_item_value, name)
             self._widget.observe(func, names=name)
         return self._widget
+
+    def _post_create(self):
+
+        pass
 
     @abstractmethod
     def _create_widget(
@@ -270,7 +276,14 @@ class GenericViewer(ItemWidget):
     ) -> Widget:
 
         output = Output()
+
         return output
+
+    def _post_create(self):
+        class Dummy:
+            new = {"n/a": "-- no result yet --"}
+
+        self.output_value_changed(None, Dummy())
 
     def print_item(self, item: Any):
 

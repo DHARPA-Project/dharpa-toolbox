@@ -107,13 +107,21 @@ class PlainJupyterWorkflowRenderer(object):
             if input_name == "files":
                 widget_cls: typing.Type = widget_classes["inputfileswidget"]
                 widgets[input_name] = widget_cls(files=loc)
-            elif input_name in ["make_lowercase", "remove_stopwords"]:
+            elif input_name in [
+                "make_lowercase",
+                "remove_stopwords",
+                "lowercase_corpus__enabled",
+                "remove_stopwords_from_corpus__enabled",
+            ]:
                 widget_cls = widget_classes["checkboxwidget"]
                 widgets[input_name] = widget_cls(item=loc)
-            elif input_name == "stopwords":
+            elif input_name in [
+                "stopwords",
+                "remove_stopwords_from_corpus__stopwords_list",
+            ]:
                 widget_cls = widget_classes["stringlistinputwidget"]
                 widgets[input_name] = widget_cls(item=loc)
-            elif input_name == "text_map":
+            elif input_name in ["text_map", "tokenize_corpus__text_map"]:
                 widget_cls = widget_classes["jsonimportwidget"]
                 widgets[input_name] = widget_cls(item=loc)
             else:

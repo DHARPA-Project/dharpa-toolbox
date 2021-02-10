@@ -20,6 +20,7 @@ nav:
 - Install: install.md
 - Usage: usage.md
 - API Documentation: api-documentation.md
+
 plugins:
 - search
 - macros:
