@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 
-from dharpa_toolbox.modules.utils import load_workflows
+from dharpa_toolbox.modules.utils_old import load_workflows
 from dharpa_toolbox.rendering.rest_api import (
     create_doc_routers_from_modules,
     create_processing_routers_from_modules,
@@ -18,7 +18,7 @@ app = FastAPI()
 
 module_router, workflow_router = create_processing_routers_from_modules()
 
-app.include_router(module_router, prefix="/processing/modules")
+app.include_router(module_router, prefix="/processing/processing")
 app.include_router(workflow_router, prefix="/processing/workflows")
 
 (
@@ -28,5 +28,5 @@ app.include_router(workflow_router, prefix="/processing/workflows")
 ) = create_doc_routers_from_modules()
 
 app.include_router(nav_doc_router, prefix="/ids")
-app.include_router(doc_module_router, prefix="/doc/modules")
+app.include_router(doc_module_router, prefix="/doc/processing")
 app.include_router(doc_workflow_router, prefix="/doc/workflows")

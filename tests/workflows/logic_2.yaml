@@ -1,0 +1,7 @@
+modules:
+  - type: and
+    id: and_1
+  - type: and
+    id: and_2
+    input_links:
+      a: and_1.y
