@@ -31,13 +31,13 @@ def test():
 
     dw: DharpaWorkflow = DharpaWorkflow.from_file("tests/workflows/logic_2.yaml")
 
-    # dw.inputs.and_1__a = True
-    # dw.inputs.and_1__b = True
-    # dw.inputs.and_2__b = True
+    dw.inputs.and_1__a = True
+    dw.inputs.and_1__b = True
+    dw.inputs.and_2__b = True
 
     dw.process()
     dw.inputs.and_2__b = False
-    dw.inputs.and_2__b = True
+    # dw.inputs.and_2__b = True
     dw.process()
 
     print(dw.outputs.ALL)

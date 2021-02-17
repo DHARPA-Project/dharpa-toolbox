@@ -110,6 +110,27 @@ class DataItem(object):
     def add_callback(self, callback: typing.Callable):
         self._callbacks.append(callback)
 
+    def clone_item(
+        self,
+        callbacks: typing.Union[
+            typing.Iterable[typing.Callable], typing.Callable
+        ] = None,
+        copy_value: bool = False,
+    ):
+
+        item = DataItem(schema=self.schema)
+        if callbacks:
+            if callable(callbacks):
+                item.add_callback(callbacks)
+            else:
+                for cb in callbacks:
+                    item.add_callback(cb)
+
+        if copy_value:
+            item.value = copy.deepcopy(self.value)
+        else:
+            item.value = self.value
+
     def __hash__(self):
 
         return hash(self._id)

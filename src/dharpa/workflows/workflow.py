@@ -5,7 +5,7 @@ import typing
 from pathlib import Path
 
 import yaml
-from dharpa.data.core import DataSchema
+from dharpa.data.core import DataItem, DataSchema
 from dharpa.processing.processing_module import (
     ProcessingModule,
     ProcessingModuleConfig,
@@ -29,6 +29,41 @@ class WorkflowPorcessingModuleConfig(ProcessingModuleConfig):
     def ensure_modules_format(cls, v):
         parsed = parse_module_configs(*v)
         return parsed
+
+
+class AssembledWorkflow(object):
+    def __init__(
+        self, structure: WorkflowStructure, inputs: InputItems, outputs: OutputItems
+    ):
+
+        self._structure: WorkflowStructure = structure
+        self._inputs: InputItems = inputs
+        self._outputs: OutputItems = outputs
+
+    @property
+    def inputs(self) -> InputItems:
+        return self._inputs
+
+    @property
+    def outputs(self) -> OutputItems:
+        return self._outputs
+
+    def process(self):
+
+        for stage in self._structure.execution_stages:
+
+            for m_id in stage:
+                module = self._structure.get_module(m_id)
+
+                if module.state == State.RESULTS_READY:
+                    continue
+                elif module.state == State.PROCESSING:
+                    raise Exception("Processing currently")
+                elif module.state == State.INPUTS_READY:
+                    module.process()
+                else:
+                    # inputs not ready
+                    continue
 
 
 class WorkflowProcessingModule(ProcessingModule):
@@ -58,60 +93,63 @@ class WorkflowProcessingModule(ProcessingModule):
 
     def _create_output_schema(self) -> typing.Mapping[str, DataSchema]:
         return {
-            input_name: w_in.schema
-            for input_name, w_in in self._workflow_structure.workflow_outputs.items()
+            output_name: w_out.schema
+            for output_name, w_out in self._workflow_structure.workflow_outputs.items()
         }
 
-    def _input_changed(self, inputs: InputItems):
+    def create_assembled_workflow(
+        self, workflow_inputs: InputItems
+    ) -> AssembledWorkflow:
 
-        print("INPUTS CHANGED")
+        structure = WorkflowStructure(*self._config.modules)  # type: ignore
 
-    def _assemble_input_output_graph(
-        self, workflow_inputs: InputItems, workflow_outputs: OutputItems
-    ):
+        structure_inputs: InputItems = InputItems(**self.input_schemas)
+        structure_outputs: OutputItems = OutputItems(**self.output_schemas)
 
-        for module_id, module_details in self.structure.module_details.items():
+        for module_id, module_details in structure.module_details.items():
 
             module_inputs = module_details["inputs"]
             module_obj: WorkflowModule = module_details["workflow_module"]
 
             for input_name, link in module_inputs.items():
                 connected_item = link.connected_item
+                input_item = module_obj.inputs[input_name]
+
                 if connected_item.link_type == "workflow_input":
-                    output_item = workflow_inputs[connected_item.value_name]
+                    workflow_input: DataItem = structure_inputs[
+                        connected_item.value_name
+                    ]
+                    workflow_input.add_callback(input_item.set_value)
+                    outer_workflow_input: DataItem = workflow_inputs[
+                        connected_item.value_name
+                    ]
+                    workflow_input.value = outer_workflow_input.value
                 else:
                     module_id = connected_item.module_id
                     value_name = connected_item.value_name
-                    other = self.structure.get_module(module_id)
+                    other = structure.get_module(module_id)
                     output_item = other.outputs[value_name]
-
-                input_item = module_obj.inputs[input_name]
-                output_item.add_callback(input_item.set_value)
+                    output_item.add_callback(input_item.set_value)
 
             module_outputs = module_details["outputs"]
-
             for output_name, link in module_outputs.items():
                 output_item = module_obj.outputs[output_name]
+
                 for wo in link.workflow_outputs:
-                    wo_item = workflow_outputs[wo.value_name]
+                    wo_item = structure_outputs[wo.value_name]
                     output_item.add_callback(wo_item.set_value)
+
+        return AssembledWorkflow(
+            structure=structure, inputs=structure_inputs, outputs=structure_outputs
+        )
 
     def _process(self, inputs: InputItems, outputs: OutputItems) -> None:
 
-        for stage in self.structure.execution_stages:
+        workflow = self.create_assembled_workflow(inputs)
+        workflow.process()
 
-            for m_id in stage:
-                module = self.structure.get_module(m_id)
-
-                if module.state == State.RESULTS_READY:
-                    continue
-                elif module.state == State.PROCESSING:
-                    raise Exception("Processing currently")
-                elif module.state == State.INPUTS_READY:
-                    module.process()
-                else:
-                    # inputs not ready
-                    continue
+        for k, v in workflow.outputs.items():
+            outputs[k].value = v.value
 
 
 class DharpaWorkflow(WorkflowModule):
@@ -156,9 +194,6 @@ class DharpaWorkflow(WorkflowModule):
             raise TypeError(
                 f"Invalid class for processing object in workflow: {self._processing_obj.__class__}"
             )
-        self._processing_obj._assemble_input_output_graph(
-            workflow_inputs=self.inputs, workflow_outputs=self.outputs
-        )
 
     @property
     def structure(self) -> WorkflowStructure:

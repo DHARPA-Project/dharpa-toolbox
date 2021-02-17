@@ -53,7 +53,6 @@ class State(Enum):
 class InputItems(DataItems):
     def __init__(
         self,
-        parent: typing.Union["WorkflowModule", "ProcessingModule"],
         **items: DataSchema,
     ):
 
@@ -67,7 +66,6 @@ class InputItems(DataItems):
 
         super().__init__(**_data_items)
         # self._id: str = id
-        self._parent: typing.Union[WorkflowModule, ProcessingModule] = parent
         self._input_allowed: bool = True
 
     # @property
@@ -100,7 +98,6 @@ class InputItems(DataItems):
 class OutputItems(DataItems):
     def __init__(
         self,
-        parent: typing.Union["WorkflowModule", "ProcessingModule"],
         **items: DataSchema,
     ):
 
@@ -114,7 +111,6 @@ class OutputItems(DataItems):
 
         super().__init__(**_data_items)
         # self._id: str = id
-        self._parent: typing.Union[WorkflowModule, ProcessingModule] = parent
         self._state: State = State.STALE
 
     # @property
@@ -161,13 +157,11 @@ class WorkflowModule(object):
         self._input_links: typing.Mapping[
             str, typing.Mapping[str, str]
         ] = explode_input_links(input_links)
-        self._current_inputs: InputItems = InputItems(parent=self, **self.input_schema)
+        self._current_inputs: InputItems = InputItems(**self.input_schema)
         for name, item in self._current_inputs.items():
             func = partial(self._input_changed, name)
             item.add_callback(func)
-        self._current_outputs: OutputItems = OutputItems(
-            parent=self, **self.output_schema
-        )
+        self._current_outputs: OutputItems = OutputItems(**self.output_schema)
 
     @property
     def id(self) -> str:
