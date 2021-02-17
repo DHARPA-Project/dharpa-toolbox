@@ -3,10 +3,10 @@
 
 """Tests for `dharpa_toolbox` package."""
 
-import dharpa_toolbox
+import dharpa
 import pytest  # noqa
 
 
 def test_assert():
 
-    assert dharpa_toolbox.get_version() is not None
+    assert dharpa.get_version() is not None

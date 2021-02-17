@@ -26,7 +26,7 @@ exclude = '''
 [tool.portray]
 output_dir = "site"
 modules = [
-"dharpa_toolbox",
+"dharpa",
 ]
 extra_markdown_extensions = [
   "attr_list"
@@ -38,8 +38,8 @@ palette = {primary = "blue grey", accent = "pink"}
 
 
 [tool.portray.mkdocs]
-repo_url = "https://gitlab.com/frkl/dharpa_toolbox"
-repo_name = "dharpa_toolbox"
+repo_url = "https://gitlab.com/DHARPA-Project/dharpa-toolbox"
+repo_name = "dharpa-toolbox"
 plugins = [
   "search",
   "macros"

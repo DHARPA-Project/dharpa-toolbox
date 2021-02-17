@@ -198,3 +198,7 @@ class DharpaWorkflow(WorkflowModule):
     @property
     def structure(self) -> WorkflowStructure:
         return self._processing_obj.stucture  # type: ignore
+
+    def create_assembled_workflow(self) -> AssembledWorkflow:
+
+        return self._processing_obj.create_assembled_workflow(self.inputs)  # type: ignore

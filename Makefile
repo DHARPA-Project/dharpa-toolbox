@@ -109,15 +109,15 @@ pre-commit:
 	pre-commit run --all-files
 
 flake: ## check style with flake8
-	flake8 src/dharpa_toolbox tests
+	flake8 src/dharpa tests
 
 mypy: ## run mypy
-	mypy src/dharpa_toolbox
+	mypy src/dharpa
 
 check: black flake mypy test ## run dev-related checks
 
 black: ## run black
-	black --config pyproject.toml setup.py src/dharpa_toolbox tests
+	black --config pyproject.toml setup.py src/dharpa tests
 
 test: ## run tests quickly with the default Python
 	py.test
