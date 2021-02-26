@@ -8,7 +8,7 @@ from dharpa.models import ProcessingConfig
 from dharpa.processing.executors import Processor
 from dharpa.processing.processing_module import ProcessingModule
 from dharpa.workflows.events import State
-from dharpa.workflows.utils import get_auto_module_id
+from dharpa.workflows.utils import get_auto_module_alias
 
 
 def explode_input_links(
@@ -122,7 +122,7 @@ class WorkflowModule(object):
         processing_config: typing.Union[
             ProcessingConfig, typing.Mapping[str, typing.Any]
         ],
-        id: str = None,
+        alias: str = None,
         workflow_id: str = None,
         input_links: typing.Mapping[str, typing.Any] = None,
     ):
@@ -134,11 +134,11 @@ class WorkflowModule(object):
         else:
             _processing_config = processing_config
 
-        if not id:
-            id = get_auto_module_id(_processing_config.module_type)
+        if not alias:
+            alias = get_auto_module_alias(_processing_config.module_type)
 
         self._workflow_id: typing.Optional[str] = workflow_id
-        self._id: str = id
+        self._alias: str = alias
         self._state: State = State.STALE
         self._is_processing: bool = False
         self._processing_config: ProcessingConfig = _processing_config
@@ -163,15 +163,15 @@ class WorkflowModule(object):
         #     self._module_event_socket.connect(f"inproc://{self.workflow_id}")
 
     @property
-    def id(self) -> str:
-        return self._id
+    def alias(self) -> str:
+        return self._alias
 
     @property
-    def full_id(self) -> str:
+    def id(self) -> str:
         if self._workflow_id:
-            return f"{self._workflow_id}.{self._id}"
+            return f"{self._workflow_id}.{self._alias}"
         else:
-            return self._id
+            return self._alias
 
     @property
     def is_workflow(self) -> bool:
@@ -253,7 +253,7 @@ class WorkflowModule(object):
 
         if self._state != State.INPUTS_READY:
             raise Exception(
-                f"Can't start processing for module '{self.id}': inputs not ready yet"
+                f"Can't start processing for module '{self.alias}': inputs not ready yet"
             )
 
         self._state = State.RESULTS_INCOMING
@@ -282,6 +282,15 @@ class WorkflowModule(object):
     def outputs(self) -> OutputItems:
         return self._current_outputs
 
+    def to_dict(self) -> typing.Dict[str, typing.Any]:
+
+        result = {}
+        result["name"] = self.alias
+
+        # TODO
+
+        return result
+
     def __repr__(self):
 
         if self.execution_stage:
@@ -289,7 +298,7 @@ class WorkflowModule(object):
         else:
             exc_stage = ""
 
-        return f"{self.__class__.__name__}(id={self.full_id}{exc_stage})"
+        return f"{self.__class__.__name__}(id={self.id}{exc_stage})"
 
     # def __str__(self):
     #

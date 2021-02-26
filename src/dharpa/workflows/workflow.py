@@ -8,44 +8,18 @@ import yaml
 import zmq
 from dharpa.data.core import DataItem, DataSchema
 from dharpa.defaults import MODULE_TYPE_KEY
-from dharpa.models import ProcessingConfig, ProcessingModuleConfig
+from dharpa.models import (
+    ProcessingConfig,
+    ProcessingModuleConfig,
+    WorkflowModuleModel,
+    WorkflowProcessingModuleConfig,
+)
 from dharpa.processing.executors import Processor
 from dharpa.processing.processing_module import ProcessingModule
 from dharpa.workflows.events import ModuleEvent, ModuleEventType, State
 from dharpa.workflows.modules import InputItems, OutputItems, WorkflowModule
 from dharpa.workflows.structure import WorkflowStructure
-from dharpa.workflows.utils import create_workflow_modules, get_auto_module_id
-from pydantic import validator
-
-
-class WorkflowProcessingModuleConfig(ProcessingModuleConfig):
-
-    modules: typing.List[typing.Mapping]
-    input_aliases: typing.Mapping[str, str] = {}
-    output_aliases: typing.Mapping[str, str] = {}
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    @validator("modules")
-    def ensure_modules_format(cls, v):
-        create_workflow_modules(*v)
-        return v
-
-
-class WorkflowProcessingModuleConfigDynamic(ProcessingModuleConfig):
-
-    modules: typing.Optional[typing.List[typing.Mapping]] = None
-    input_aliases: typing.Mapping[str, str] = {}
-    output_aliases: typing.Mapping[str, str] = {}
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    @validator("modules")
-    def ensure_modules_format(cls, v):
-        create_workflow_modules(*v)
-        return v
+from dharpa.workflows.utils import create_workflow_modules
 
 
 class AssembledWorkflowInteractive(object):
@@ -367,7 +341,7 @@ class WorkflowProcessingModule(ProcessingModule):
             result = f"{result}\n\nStage {i}:\n"
             for m_id in stage:
                 m = self.structure.get_module(m_id)
-                result = f"{result}\n\t{m.id}: {m.doc}"
+                result = f"{result}\n\t{m.alias}: {m.doc}"
 
         return result
 
@@ -377,7 +351,7 @@ class DharpaWorkflow(WorkflowModule):
     def from_file(
         cls,
         path: typing.Union[str, Path],
-        module_type_name: typing.Optional[str] = None,
+        workflow_alias: typing.Optional[str] = None,
     ):
         """Create a workflow object from configuration stored in a yaml or json file."""
 
@@ -400,30 +374,23 @@ class DharpaWorkflow(WorkflowModule):
         else:
             config = yaml.safe_load(content)
 
-        config_module_type_name = config.pop(MODULE_TYPE_KEY + "_name", None)
-        if not module_type_name:
-            if config_module_type_name:
-                module_type_name = get_auto_module_id(config_module_type_name)
-            else:
-                file_name_without_ext = path.name.split(".", maxsplit=1)[0]
-                module_type_name = get_auto_module_id(file_name_without_ext)
+        m_conf = WorkflowModuleModel(**config)
+        print(m_conf)
+        if m_conf.module_type_name is None:
+            m_conf.module_type_name = path.name.split(".", maxsplit=1)[0]
 
-        input_links = config.pop("input_links", None)
-        doc = config.pop("doc", None)
+        if workflow_alias is None:
+            workflow_alias = f"workflow_{m_conf.module_type_name}"
 
-        return DharpaWorkflow(
-            id=module_type_name,
-            processing_config={"module_name": "workflow", "config": config},
-            input_links=input_links,
-            doc=doc,
-        )
+        wf = m_conf.create_workflow(alias=workflow_alias)
+        return wf
 
     def __init__(
         self,
         processing_config: typing.Union[
             ProcessingConfig, typing.Mapping[str, typing.Any]
         ],
-        id: str = None,
+        alias: str = None,
         input_links: typing.Mapping[str, typing.Any] = None,
         workflow_id: str = None,
         doc: str = None,
@@ -440,14 +407,13 @@ class DharpaWorkflow(WorkflowModule):
         self._workflow_doc: typing.Optional[str] = doc
 
         self._processing_obj: WorkflowProcessingModule
-
         super().__init__(
             processing_config=processing_config,
-            id=id,
+            alias=alias,
             input_links=input_links,
             workflow_id=workflow_id,
         )
-        self._processing_obj.set_workflow_id(self.id)
+        self._processing_obj.set_workflow_id(self.alias)
 
         if not isinstance(self._processing_obj, WorkflowProcessingModule):
             raise TypeError(
@@ -460,7 +426,7 @@ class DharpaWorkflow(WorkflowModule):
             self._current_inputs,
             self._current_outputs,
             executor=executor,
-            workflow_id=self.id,
+            workflow_id=self.alias,
         )
 
     @property

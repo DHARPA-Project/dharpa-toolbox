@@ -7,9 +7,10 @@ from typing import Type, Union
 from dharpa.defaults import (
     DEFAULT_EXCLUDE_DIRS,
     DEFAULT_MODULES_TO_LOAD,
-    MODULE_TYPE_KEY,
+    MODULE_TYPE_NAME_KEY,
     VALID_WORKFLOW_FILE_EXTENSIONS,
 )
+from dharpa.models import ProcessingConfig
 from dharpa.utils import (
     get_data_from_file,
     get_snake_case_from_class,
@@ -19,7 +20,6 @@ from dharpa.utils import (
 
 
 if typing.TYPE_CHECKING:
-    from dharpa.models import ProcessingConfig
     from dharpa.workflows.modules import WorkflowModule
     from dharpa.processing.processing_module import ProcessingModule
     from dharpa.workflows.workflow import (
@@ -75,7 +75,7 @@ def find_workflow_descriptions(
 
             path = os.path.join(root, filename)
             data = get_data_from_file(path)
-            name = data.get(MODULE_TYPE_KEY + "_name", None)
+            name = data.get(MODULE_TYPE_NAME_KEY, None)
             if name is None:
                 name = filename.split(".", maxsplit=1)[0]
 
@@ -96,10 +96,8 @@ def generate_workflow_processing_class_from_config(
         config.update(_workflow_config)
         super(self.__class__, self).__init__(**config)
 
-    from dharpa.workflows.workflow import (
-        WorkflowProcessingModule,
-        WorkflowProcessingModuleConfigDynamic,
-    )
+    from dharpa.workflows.workflow import WorkflowProcessingModule
+    from dharpa.models import WorkflowProcessingModuleConfigDynamic
 
     attrs = {
         "__init__": init,
@@ -140,10 +138,11 @@ def create_workflow_modules(
                 )
             if c.workflow_id != workflow_id:
                 raise ValueError(
-                    f"Invalid workflow id '{c.workflow_id}' for module '{c.id}': must match '{workflow_id}'"
+                    f"Invalid workflow id '{c.workflow_id}' for module '{c.alias}': must match '{workflow_id}'"
                 )
             m = c
         elif isinstance(c, typing.Mapping):
+
             _c = dict(c)
             m_id = _c.pop("id", None)
             input_links = _c.pop("input_links", None)
@@ -151,14 +150,14 @@ def create_workflow_modules(
 
             if processing_config.is_workflow:
                 m = DharpaWorkflow(
-                    id=m_id,
+                    alias=m_id,
                     workflow_id=workflow_id,
                     processing_config=processing_config,
                     input_links=input_links,
                 )
             else:
                 m = WorkflowModule(
-                    id=m_id,
+                    alias=m_id,
                     workflow_id=workflow_id,
                     processing_config=processing_config,
                     input_links=input_links,
@@ -169,11 +168,11 @@ def create_workflow_modules(
                 f"Can't create workflow modules, invalid type for module: '{type(c)}'"
             )
 
-        if m.id in module_ids:
+        if m.alias in module_ids:
             raise ValueError(
-                f"Can't parse module configs: duplicate module ids: {m.id}"
+                f"Can't parse module configs: duplicate module ids: {m.alias}"
             )
-        module_ids.add(m.id)
+        module_ids.add(m.alias)
         result.append(m)
 
     return result
@@ -182,7 +181,7 @@ def create_workflow_modules(
 _AUTO_MODULE_ID: typing.Dict[str, int] = {}
 
 
-def get_auto_module_id(
+def get_auto_module_alias(
     module_cls: typing.Union[typing.Type, str], use_incremental_ids: bool = False
 ) -> str:
     """Return an id for a module obj of a provided module class.

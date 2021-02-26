@@ -45,7 +45,9 @@ async def test():
     # find_all_processing_module_classes()
     # dw: DharpaWorkflow = DharpaWorkflow.from_file("tests/workflows/logic_3.yaml")
 
-    # dw: DharpaWorkflow = DharpaWorkflow.from_file("/home/markus/projects/dharpa/dharpa-toolbox/src/dharpa/resources/workflows/logic_gates/xor.json")
+    dw: DharpaWorkflow = DharpaWorkflow.from_file(
+        "/home/markus/projects/dharpa/dharpa-toolbox/src/dharpa/resources/workflows/logic_gates/xor.json"
+    )
 
     dw: DharpaWorkflow = dharpa.create_workflow("xor")
     print(dw)

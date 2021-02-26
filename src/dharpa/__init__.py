@@ -5,7 +5,6 @@ import os
 import typing
 
 from dharpa.defaults import DHARPA_TOOLBOX_DEFAULT_WORKFLOWS_FOLDER
-from dharpa.workflows.utils import generate_workflow_processing_class_from_config
 
 
 if typing.TYPE_CHECKING:
@@ -139,6 +138,10 @@ class ModuleCollection(object):
             self._workflow_configs[key]["config"] = pc
 
         if self.get_workflow_configs()[key].get("cls", None) is None:
+            from dharpa.workflows.utils import (
+                generate_workflow_processing_class_from_config,
+            )
+
             self._workflow_configs[key][
                 "cls"
             ] = generate_workflow_processing_class_from_config(
@@ -164,11 +167,11 @@ class ModuleCollection(object):
 DHARPA_MODULES = ModuleCollection()
 
 
-def create_workflow(module_type: str, workflow_id: typing.Optional[str] = None):
+def create_workflow(module_type: str, workflow_alias: typing.Optional[str] = None):
 
     from dharpa.workflows.workflow import DharpaWorkflow
     from dharpa.models import ProcessingConfig
 
     config = ProcessingConfig(module_type=module_type)
-    w = DharpaWorkflow(processing_config=config, id=workflow_id)
+    w = DharpaWorkflow(processing_config=config, alias=workflow_alias)
     return w

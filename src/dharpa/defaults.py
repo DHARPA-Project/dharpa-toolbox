@@ -28,6 +28,7 @@ VALID_WORKFLOW_FILE_EXTENSIONS = ["yaml", "yml", "json"]
 DEFAULT_MODULES_TO_LOAD = ("dharpa.processing.core.logic_gates",)
 
 MODULE_TYPE_KEY = "module_type"
+MODULE_TYPE_NAME_KEY = "module_type_name"
 
 DEFAULT_EXCLUDE_DIRS = [".git", ".tox", ".cache"]
 """List of directory names to exclude by default when walking a folder recursively."""
