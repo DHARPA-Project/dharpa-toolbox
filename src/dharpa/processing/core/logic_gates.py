@@ -1,12 +1,25 @@
 # -*- coding: utf-8 -*-
+import time
 import typing
 
 from dharpa.data.core import DataSchema, DataType
+from dharpa.models import ProcessingModuleConfig
 from dharpa.processing.processing_module import ProcessingModule
 from dharpa.workflows.modules import InputItems, OutputItems
 
 
-class NotProcessingModule(ProcessingModule):
+class LogicProcessingModuleConfig(ProcessingModuleConfig):
+
+    delay: float = 2
+
+
+class LogicProcessingModule(ProcessingModule):
+
+    _processing_step_config_cls = LogicProcessingModuleConfig
+
+
+class NotProcessingModule(LogicProcessingModule):
+    """Negates the input."""
 
     _module_name = "not"
 
@@ -20,12 +33,15 @@ class NotProcessingModule(ProcessingModule):
 
         return {"y": DataSchema(DataType.boolean)}
 
-    def _process(self, inputs: InputItems, outputs: OutputItems) -> None:
+    async def _process(self, inputs: InputItems, outputs: OutputItems) -> None:
+
+        time.sleep(self.config.get("delay"))  # type: ignore
 
         outputs.y = not inputs.a
 
 
-class AndProcessingModule(ProcessingModule):
+class AndProcessingModule(LogicProcessingModule):
+    """Returns 'True' if both inputs are 'True'."""
 
     _module_name = "and"
 
@@ -37,12 +53,14 @@ class AndProcessingModule(ProcessingModule):
 
         return {"y": DataSchema(DataType.boolean)}
 
-    def _process(self, inputs: InputItems, outputs: OutputItems) -> None:
+    async def _process(self, inputs: InputItems, outputs: OutputItems) -> None:
 
+        time.sleep(self.config.get("delay"))  # type: ignore
         outputs.y = inputs.a and inputs.b
 
 
-class OrProcessingModule(ProcessingModule):
+class OrProcessingModule(LogicProcessingModule):
+    """Returns 'True' if one of the inputs is 'True'."""
 
     _module_name = "or"
 
@@ -54,6 +72,7 @@ class OrProcessingModule(ProcessingModule):
 
         return {"y": DataSchema(DataType.boolean)}
 
-    def _process(self, inputs: InputItems, outputs: OutputItems) -> None:
+    async def _process(self, inputs: InputItems, outputs: OutputItems) -> None:
 
+        time.sleep(self.config.get("delay"))  # type: ignore
         outputs.y = inputs.a or inputs.b

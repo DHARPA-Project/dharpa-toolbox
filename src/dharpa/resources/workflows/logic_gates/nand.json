@@ -1,0 +1,22 @@
+{
+  "modules": [
+    {
+      "module_type": "and"
+    },
+    {
+      "module_type": "not",
+      "input_links": {
+        "a": "and.y"
+      }
+    }
+  ],
+  "input_aliases": {
+    "and__a": "a",
+    "and__b": "b"
+  },
+  "output_aliases": {
+    "not__y": "y"
+  },
+  "module_type_name": "nand",
+  "doc": "Returns 'True' if both inputs are 'False'."
+}

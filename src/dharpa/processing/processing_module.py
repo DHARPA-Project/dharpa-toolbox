@@ -1,60 +1,34 @@
 # -*- coding: utf-8 -*-
+import inspect
 import typing
 from abc import ABCMeta, abstractmethod
 
 from dharpa.data.core import DataSchema
-from dharpa.utils import get_module_name_from_class
-from pydantic import BaseModel
+from dharpa.models import ProcessingModuleConfig
 
 
 if typing.TYPE_CHECKING:
     from dharpa.workflows.modules import InputItems, OutputItems
 
-_AUTO_MODULE_ID: typing.Dict[str, int] = {}
 """Global variable to store unique/used module ids per type."""
 
 
-def get_auto_module_id(
-    module_cls: typing.Union[typing.Type, str], use_incremental_ids: bool = False
-) -> str:
-    """Return an id for a module obj of a provided module class.
-
-    If 'use_incremental_ids' is set to True, a unique id is returned.
-
-    Args:
-        module_cls (Type): the module class (inherits from DharpaModule)
-        use_incremental_ids (bool): whether to return a unique (incremental) id
-
-    Returns:
-        str: a module id
-    """
-
-    if isinstance(module_cls, str):
-        name = module_cls
-    else:
-        name = get_module_name_from_class(module_cls)
-    if not use_incremental_ids:
-        return name
-
-    nr = _AUTO_MODULE_ID.setdefault(name, 0)
-    _AUTO_MODULE_ID[name] = nr + 1
-
-    return f"{name}_{nr}"
-
-
-class ProcessingModuleConfig(BaseModel):
-    pass
-
-
 class ProcessingModule(metaclass=ABCMeta):
+
+    _processing_step_config_cls: typing.Type[
+        ProcessingModuleConfig
+    ] = ProcessingModuleConfig
+
     def __init__(self, **config: typing.Any):
 
-        self._config: ProcessingModuleConfig = self._processing_step_config_cls()(
-            **config
+        self._config: ProcessingModuleConfig = (
+            self.__class__._processing_step_config_cls(**config)
         )
 
         self._input_schemas: typing.Mapping[str, DataSchema] = None  # type: ignore
         self._output_schemas: typing.Mapping[str, DataSchema] = None  # type: ignore
+
+        self._doc: str = None  # type: ignore
 
     @property
     def config(self) -> typing.Mapping[str, typing.Any]:
@@ -80,6 +54,27 @@ class ProcessingModule(metaclass=ABCMeta):
             self._output_schemas = self._create_output_schema()
         return self._output_schemas
 
+    @property
+    def doc(self) -> str:
+        if self._doc is None:
+            self._doc = self._get_doc()
+        return self._doc
+
+    def _get_doc(self) -> str:
+
+        doc = self.__doc__
+        if not doc:
+            try:
+                doc = self.__init__.__doc__  # type: ignore
+            except Exception:
+                pass
+
+        if not doc:
+            return "-- n/a --"
+        else:
+            doc = inspect.cleandoc(doc)
+            return doc
+
     @abstractmethod
     def _create_input_schema(self) -> typing.Mapping[str, DataSchema]:
         pass
@@ -89,27 +84,34 @@ class ProcessingModule(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _process(self, inputs: "InputItems", outputs: "OutputItems") -> None:
+    async def _process(self, inputs: "InputItems", outputs: "OutputItems") -> None:
         pass
 
-    def _processing_step_config_cls(self) -> typing.Type[ProcessingModuleConfig]:
-        return ProcessingModuleConfig
+    async def process(self, inputs: "InputItems", outputs: "OutputItems") -> None:
 
-    def process(self, inputs: "InputItems", outputs: "OutputItems") -> None:
-
-        self._process(inputs=inputs, outputs=outputs)
+        await self._process(inputs=inputs, outputs=outputs)
 
     def __eq__(self, other):
 
         if self.__class__ != other.__class__:
             return False
 
-        return self.id == other.id
+        return self.config == other.config
 
     def __hash__(self):
 
-        return hash(self.id)
+        return hash(self.config)
 
     def __repr__(self):
 
-        return f"{self.__class__.__name__}(id='{self.id}' input_names={self.input_names} output_names={self.output_names})"
+        return f"{self.__class__.__name__}(input_names={self.input_names} output_names={self.output_names})"
+
+
+class ProcessingBundle(object):
+    def __init__(
+        self, type: str, config: typing.Mapping[str, typing.Any], inputs: "InputItems"
+    ):
+
+        self._processing_module_type: str = type
+        self._module_config: typing.Mapping[str, typing.Any] = config
+        self._inputs: InputItems = inputs

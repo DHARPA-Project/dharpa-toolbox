@@ -2,19 +2,21 @@
 import collections.abc
 import importlib
 import inspect
+import json
 import logging
+import os
 import re
 import typing
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Set, Type, Union
+
+import yaml
 
 
 log = logging.getLogger("dharpa")
 
 if typing.TYPE_CHECKING:
-    from dharpa.processing.processing_module import ProcessingModule
-
-DEFAULT_MODULES_TO_LOAD = ("dharpa.processing.core.logic_gates",)
-
+    pass
 
 _PRELOADED = []
 
@@ -46,14 +48,6 @@ def to_camel_case(snake_str, capitalize: bool = True):
     result = "".join([first, *map(str.capitalize, others)])
 
     return result
-
-
-def get_module_name_from_class(cls: Type):
-
-    if hasattr(cls, "_module_name"):
-        return cls._module_name
-    else:
-        return get_snake_case_from_class(cls)
 
 
 def load_modules(modules: Union[None, str, Iterable[str]]) -> bool:
@@ -141,20 +135,44 @@ def get_subclass_map(
     return result
 
 
-# @lru_cache()
-def find_all_module_classes(
-    *modules_to_load: str,
-) -> typing.Mapping[str, Type["ProcessingModule"]]:
+def get_data_from_file(path: Union[str, Path]):
 
-    from dharpa.processing.processing_module import ProcessingModule
+    if isinstance(path, str):
+        path = Path(os.path.expanduser(path))
 
-    if not modules_to_load:
-        modules_to_load = DEFAULT_MODULES_TO_LOAD
+    content = path.read_text()
 
-    all_module_clases = get_subclass_map(
-        ProcessingModule,
-        preload_modules=modules_to_load,
-        key_func=get_module_name_from_class,
-        override_duplicate_class=True,
-    )
-    return all_module_clases
+    if path.name.endswith(".json"):
+        content_type = "json\n"
+    elif path.name.endswith(".yaml") or path.name.endswith(".yml"):
+        content_type = "yaml\n"
+    else:
+        raise ValueError(
+            "Invalid data format, only 'json' or 'yaml' are supported currently."
+        )
+
+    if content_type == "json":
+        data = json.loads(content)
+    else:
+        data = yaml.safe_load(content)
+
+    return data
+
+
+# def print_file_content(path: Union[str, Path]):
+#
+#     if isinstance(path, str):
+#         path = Path(os.path.expanduser(path))
+#
+#     content = path.read_text()
+#
+#     if path.name.endswith(".json"):
+#         content_type = "json\n"
+#     elif path.name.endswith(".yaml") or path.name.endswith(".yml"):
+#         content_type = "yaml\n"
+#     else:
+#         content_type = ""
+#
+#     md = Markdown(f"```{content_type}" + content + "```")
+#
+#     display(md)

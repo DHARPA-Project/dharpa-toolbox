@@ -1,0 +1,20 @@
+{
+  "modules": [
+    {
+      "module_type": "or"
+    },
+    {
+      "module_type": "not",
+      "input_links": {
+        "a": "or.y"
+      }
+    }
+  ],
+  "input_aliases": {
+    "and__a": "a",
+    "and__b": "b"
+  },
+  "output_aliases": {
+    "not__y": "y"
+  }
+}

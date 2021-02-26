@@ -5,6 +5,7 @@ from functools import lru_cache
 import networkx as nx
 from dharpa.data.core import DataSchema
 from dharpa.workflows.modules import WorkflowModule
+from dharpa.workflows.utils import create_workflow_modules
 
 
 class DataLink(object):
@@ -91,7 +92,7 @@ class ModuleOutputLink(ModuleLink):
             raise TypeError(f"Invalid target type: {type(target)}")
 
     def __repr__(self):
-        return f"ModuleOutputLink(module='{self.module_id}' input_name='{self.value_name}')"
+        return f"ModuleOutputLink(module='{self.module_id}' output_name='{self.value_name}')"
 
 
 class WorkflowInputLink(DataLink):
@@ -145,38 +146,31 @@ class WorkflowOutputLink(DataLink):
         return self.value_name
 
     def __repr__(self):
-        return f"WorkflowOutputLink(input_name='{self.value_name}')"
-
-
-def parse_module_configs(
-    *configs: typing.Union[WorkflowModule, typing.Mapping]
-) -> typing.List[WorkflowModule]:
-
-    result = []
-    module_ids: typing.Set[str] = set()
-    for c in configs:
-        if isinstance(c, WorkflowModule):
-            m = c
-        else:
-            m = WorkflowModule(**c)
-            # m = WorkflowModule.from_dict(**c)
-
-        if m.id in module_ids:
-            raise ValueError(
-                f"Can't parse module configs: duplicate module ids: {m.id}"
-            )
-        module_ids.add(m.id)
-        result.append(m)
-
-    return result
+        return f"WorkflowOutputLink(output_name='{self.value_name}')"
 
 
 class WorkflowStructure(object):
-    def __init__(self, *modules: typing.Union[typing.Mapping, WorkflowModule]):
+    def __init__(
+        self,
+        *modules: typing.Union[typing.Mapping, WorkflowModule],
+        workflow_id: str = None,
+        input_aliases: typing.Mapping[str, str] = None,
+        output_aliases: typing.Mapping[str, str] = None,
+        add_all_workflow_outputs: bool = False,
+    ):
 
-        self._workflow_modules: typing.List[WorkflowModule] = parse_module_configs(
-            *modules
+        self._workflow_modules: typing.List[WorkflowModule] = create_workflow_modules(
+            *modules, workflow_id=workflow_id, force_mappings=True
         )
+
+        if input_aliases is None:
+            input_aliases = {}
+        self._input_aliases: typing.Mapping[str, str] = input_aliases
+        if output_aliases is None:
+            output_aliases = {}
+        self._output_aliases: typing.Mapping[str, str] = output_aliases
+
+        self._add_all_workflow_outputs: bool = add_all_workflow_outputs
 
         self._execution_graph: nx.DiGraph = None  # type: ignore
         self._data_flow_graph: nx.DiGraph = None  # type: ignore
@@ -251,6 +245,7 @@ class WorkflowStructure(object):
     def _get_node_of_type(self, node_type: str):
         if self._execution_stages is None:
             self._process_modules()
+
         return [
             node
             for node, attr in self._data_flow_graph.nodes(data=True)
@@ -285,8 +280,22 @@ class WorkflowStructure(object):
             for node in self._get_node_of_type(node_type=ModuleOutputLink.link_type)
         }
 
+    @property
+    def workflow_input_schema(self) -> typing.Mapping[str, DataSchema]:
+
+        return {
+            input_name: w_in.schema for input_name, w_in in self.workflow_inputs.items()
+        }
+
+    @property
+    def workflow_output_schema(self) -> typing.Mapping[str, DataSchema]:
+        return {
+            output_name: w_out.schema
+            for output_name, w_out in self.workflow_outputs.items()
+        }
+
     def _process_modules(self):
-        """The core method of a workflow, this connects all the processing, their inputs and outputs."""
+        """The core method of this class, it connects all the processing modules, their inputs and outputs."""
 
         module_details: typing.Dict[str, typing.Any] = {}
         execution_graph = nx.DiGraph()
@@ -294,8 +303,10 @@ class WorkflowStructure(object):
         data_flow_graph = nx.DiGraph()
         execution_stages = []
 
-        # add all processing and module outputs first
+        # temp variable, to hold all outputs
         outputs: typing.Dict[str, ModuleOutputLink] = {}
+
+        # add all processing and module outputs first
         for workflow_module in self._workflow_modules:
 
             module_details[workflow_module.id] = {
@@ -307,6 +318,7 @@ class WorkflowStructure(object):
             data_flow_graph.add_node(workflow_module, type="module")
 
             for output_name, schema in workflow_module.output_schema.items():
+
                 module_output = ModuleOutputLink(
                     module_id=workflow_module.id, value_name=output_name, schema=schema
                 )
@@ -314,19 +326,32 @@ class WorkflowStructure(object):
                     output_name
                 ] = module_output
                 outputs[f"{workflow_module.id}.{output_name}"] = module_output
-                workflow_output = WorkflowOutputLink(
-                    value_name=f"{workflow_module.id}__{output_name}",
-                    connected_output=module_output,
-                    schema=schema,
-                )
-                module_output.connect_target(workflow_output)
-                data_flow_graph.add_node(module_output, type=ModuleOutputLink.link_type)
-                data_flow_graph.add_node(
-                    workflow_output, type=WorkflowOutputLink.link_type
-                )
-                data_flow_graph.add_edge(workflow_module, module_output)
-                data_flow_graph.add_edge(module_output, workflow_output)
 
+                m_id = f"{workflow_module.id}__{output_name}"
+                if self._output_aliases:
+                    if m_id in self._output_aliases.keys():
+                        m_id = self._output_aliases[m_id]
+                    else:
+                        if not self._add_all_workflow_outputs:
+                            # this output is not interesting for the workflow
+                            m_id = None
+
+                if m_id:
+                    workflow_output = WorkflowOutputLink(
+                        value_name=m_id,
+                        connected_output=module_output,
+                        schema=schema,
+                    )
+                    module_output.connect_target(workflow_output)
+                    data_flow_graph.add_node(
+                        workflow_output, type=WorkflowOutputLink.link_type
+                    )
+                    data_flow_graph.add_edge(module_output, workflow_output)
+
+                data_flow_graph.add_edge(workflow_module, module_output)
+                data_flow_graph.add_node(module_output, type=ModuleOutputLink.link_type)
+
+        existing_input_links: typing.Dict = {}
         for workflow_module in self._workflow_modules:
 
             other_module_dependency: typing.Set = set()
@@ -341,13 +366,21 @@ class WorkflowStructure(object):
                     ]
                     other_module_dependency.add(connected_data.module_id)
                 else:
-                    connected_data = WorkflowInputLink(
-                        value_name=f"{workflow_module.id}__{input_name}", schema=schema
-                    )
+                    m_id = f"{workflow_module.id}__{input_name}"
+                    if self._input_aliases:
+                        if m_id in self._input_aliases.keys():
+                            m_id = self._input_aliases[m_id]
+
+                    if m_id in existing_input_links.keys():
+                        connected_data = existing_input_links[m_id]
+                    else:
+                        connected_data = WorkflowInputLink(
+                            value_name=m_id, schema=schema
+                        )
+                        data_flow_graph.add_node(
+                            connected_data, type=WorkflowInputLink.link_type
+                        )
                     link_workflow_input = True
-                    data_flow_graph.add_node(
-                        connected_data, type=WorkflowInputLink.link_type
-                    )
 
                 input_link = ModuleInputLink(
                     module_id=workflow_module.id,
@@ -355,15 +388,20 @@ class WorkflowStructure(object):
                     schema=schema,
                     connected_item=connected_data,
                 )
+
+                data_flow_graph.add_node(input_link, type=ModuleInputLink.link_type)
+
                 if link_workflow_input:
                     connected_data.connected_input = input_link
+                    data_flow_graph.add_edge(connected_data, input_link)
+                    if connected_data.value_name not in existing_input_links.keys():
+                        existing_input_links[connected_data.value_name] = connected_data
                 else:
                     connected_data.connect_target(input_link)
+                    data_flow_graph.add_edge(connected_data, input_link)
 
                 module_details[workflow_module.id]["inputs"][input_name] = input_link
 
-                data_flow_graph.add_node(input_link, type=ModuleInputLink.link_type)
-                data_flow_graph.add_edge(connected_data, input_link)
                 data_flow_graph.add_edge(input_link, workflow_module)
 
             if other_module_dependency:
@@ -392,6 +430,7 @@ class WorkflowStructure(object):
             execution_stages.append(stage)
             for _mod_id in stage:
                 module_details[_mod_id]["processing_stage"] = i
+                module_details[_mod_id]["workflow_module"].execution_stage = i
 
         self._module_details = module_details
         self._execution_graph = execution_graph

@@ -190,12 +190,20 @@ class DataItems(collections.abc.MutableMapping):
         return len(self._data_items)
 
     @property
-    def items__is_valid(self) -> bool:
+    def items__are_valid(self) -> bool:
 
         for item in self._data_items.values():
             if not item.valid:
                 return False
         return True
+
+    def items__to_dict(self) -> typing.Dict[str, typing.Any]:
+
+        result = {}
+        for k, v in self.items():
+            result[k] = v.value
+
+        return result
 
     def _pre_values_set(self, values_to_set: typing.Mapping[str, typing.Any]):
         pass
@@ -224,4 +232,4 @@ class DataItems(collections.abc.MutableMapping):
 
     def __repr__(self):
 
-        return f"DataItems(value_names={list(self._data_items.keys())} valid={self.items__is_valid})"
+        return f"DataItems(value_names={list(self._data_items.keys())} valid={self.items__are_valid})"

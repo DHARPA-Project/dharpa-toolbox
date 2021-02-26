@@ -19,3 +19,15 @@ else:
 DHARPA_TOOLBOX_RESOURCES_FOLDER = os.path.join(
     DHARPA_TOOLBOX_MODULE_BASE_FOLDER, "resources"
 )
+
+DHARPA_TOOLBOX_DEFAULT_WORKFLOWS_FOLDER = os.path.join(
+    DHARPA_TOOLBOX_RESOURCES_FOLDER, "workflows"
+)
+
+VALID_WORKFLOW_FILE_EXTENSIONS = ["yaml", "yml", "json"]
+DEFAULT_MODULES_TO_LOAD = ("dharpa.processing.core.logic_gates",)
+
+MODULE_TYPE_KEY = "module_type"
+
+DEFAULT_EXCLUDE_DIRS = [".git", ".tox", ".cache"]
+"""List of directory names to exclude by default when walking a folder recursively."""

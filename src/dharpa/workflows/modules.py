@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import collections
 import typing
-from enum import Enum
 from functools import partial
 
 from dharpa.data.core import DataItem, DataItems, DataSchema
-from dharpa.processing.processing_module import ProcessingModule, get_auto_module_id
-from dharpa.utils import find_all_module_classes
+from dharpa.models import ProcessingConfig
+from dharpa.processing.executors import Processor
+from dharpa.processing.processing_module import ProcessingModule
+from dharpa.workflows.events import State
+from dharpa.workflows.utils import get_auto_module_id
 
 
 def explode_input_links(
@@ -40,14 +42,6 @@ def explode_input_links(
         result[input_name] = {"module_id": module_id, "value_name": output_name}
 
     return result
-
-
-class State(Enum):
-
-    STALE = 0
-    INPUTS_READY = 1
-    PROCESSING = 2
-    RESULTS_READY = 3
 
 
 class InputItems(DataItems):
@@ -92,7 +86,7 @@ class InputItems(DataItems):
 
     def __repr__(self):
 
-        return f"InputItems(value_names={list(self._data_items.keys())} valid={self.items__is_valid})"
+        return f"InputItems(value_names={list(self._data_items.keys())} valid={self.items__are_valid})"
 
 
 class OutputItems(DataItems):
@@ -119,42 +113,41 @@ class OutputItems(DataItems):
 
     def __repr__(self):
 
-        return f"OutputItems(value_names={list(self._data_items.keys())} valid={self.items__is_valid} state={self._state.name})"
+        return f"OutputItems(value_names={list(self._data_items.keys())} valid={self.items__are_valid} state={self._state.name})"
 
 
 class WorkflowModule(object):
     def __init__(
         self,
-        type: str,
+        processing_config: typing.Union[
+            ProcessingConfig, typing.Mapping[str, typing.Any]
+        ],
         id: str = None,
+        workflow_id: str = None,
         input_links: typing.Mapping[str, typing.Any] = None,
-        **config: typing.Any,
     ):
 
-        if not isinstance(type, str):
-            raise TypeError(
-                f"Invalid type for processing module, must be string: {type}"
+        if isinstance(processing_config, typing.Mapping):
+            _processing_config: ProcessingConfig = ProcessingConfig.from_dict(
+                **processing_config
             )
-
-        all_modules = find_all_module_classes()
-
-        processing_cls = all_modules.get(type, None)
-        if processing_cls is None:
-            raise ValueError(
-                f"Can't parse config, can't find module type '{type}'. Available modules: {', '.join(all_modules.keys())}"
-            )
+        else:
+            _processing_config = processing_config
 
         if not id:
-            id = get_auto_module_id(self.__class__)
+            id = get_auto_module_id(_processing_config.module_type)
 
+        self._workflow_id: typing.Optional[str] = workflow_id
         self._id: str = id
         self._state: State = State.STALE
-        self._processing_module_type: str = type
-        self._processing_module_config = config
+        self._is_processing: bool = False
+        self._processing_config: ProcessingConfig = _processing_config
 
-        self._processing_obj: ProcessingModule = processing_cls(**config)
+        self._processing_obj: ProcessingModule = (
+            self._processing_config.create_processing_module()
+        )
 
-        self._input_links: typing.Mapping[
+        self._input_connection_map: typing.Mapping[
             str, typing.Mapping[str, str]
         ] = explode_input_links(input_links)
         self._current_inputs: InputItems = InputItems(**self.input_schema)
@@ -162,14 +155,47 @@ class WorkflowModule(object):
             func = partial(self._input_changed, name)
             item.add_callback(func)
         self._current_outputs: OutputItems = OutputItems(**self.output_schema)
+        self._execution_stage: typing.Optional[int] = None
+
+        # self._zmq_context: zmq.Context = zmq.Context.instance()
+        # self._module_event_socket: zmq.Socket = self._zmq_context.socket(zmq.PUSH)
+        # if self._workflow_id:
+        #     self._module_event_socket.connect(f"inproc://{self.workflow_id}")
 
     @property
     def id(self) -> str:
         return self._id
 
     @property
+    def full_id(self) -> str:
+        if self._workflow_id:
+            return f"{self._workflow_id}.{self._id}"
+        else:
+            return self._id
+
+    @property
+    def is_workflow(self) -> bool:
+        return False
+
+    @property
+    def execution_stage(self) -> typing.Optional[int]:
+        return self._execution_stage
+
+    @execution_stage.setter
+    def execution_stage(self, stage: int):
+        self._execution_stage = stage
+
+    @property
+    def workflow_id(self) -> typing.Optional[str]:
+        return self._workflow_id
+
+    @property
+    def doc(self) -> str:
+        return self._processing_obj.doc
+
+    @property
     def input_connection_map(self) -> typing.Mapping[str, typing.Mapping[str, str]]:
-        return self._input_links
+        return self._input_connection_map
 
     @property
     def input_schema(self) -> typing.Mapping[str, DataSchema]:
@@ -184,33 +210,73 @@ class WorkflowModule(object):
         return self._current_inputs
 
     def _input_changed(self, input_name: str, new_value: typing.Any):
-        self._state = State.STALE
+
+        self._update_state()
 
     @property
     def state(self) -> State:
         if self._state == State.STALE:
-            if self.inputs.items__is_valid:
+            if self.inputs.items__are_valid:
                 self._state = State.INPUTS_READY
+        return self._state
+
+    @property
+    def is_processing(self) -> bool:
+        return self._is_processing
+
+    def _update_state(self) -> State:
+
+        # current = self._state
+        if not self.inputs.items__are_valid:
+            new_state = State.STALE
+        elif not self.outputs.items__are_valid:
+            new_state = State.INPUTS_READY
+        else:
+            new_state = State.RESULTS_READY
+
+        self._state = new_state
+
+        # if current != new_state:
+        #     print(f"{self} - new state: {self._state}")
+
+        # if current != new_state:
+        #     module_event = ModuleEvent(ModuleEventType.state_changed, module_id=self.id, old_state=current.name, new_state=new_state.name)
+        #     self._module_event_socket.send_json(module_event.to_dict())
+
         return self._state
 
     def _outputs_changed(self, outputs: OutputItems):
 
-        if outputs.items__state == State.RESULTS_READY:
-            self._state = State.RESULTS_READY
-            self._current_inputs.items__enable()
+        self._update_state()
 
-    def process(self):
+    async def process(self, executor: Processor = None):
 
-        self._state = State.PROCESSING
+        if self._state != State.INPUTS_READY:
+            raise Exception(
+                f"Can't start processing for module '{self.id}': inputs not ready yet"
+            )
+
+        self._state = State.RESULTS_INCOMING
         self._current_inputs.items__disable()
 
-        self._processing_obj.process(self._current_inputs, self._current_outputs)
-        self._current_inputs.items__enable()
+        # print(f"process started: {self} {executor}")
 
-        if self.outputs.items__is_valid:
-            self._state = State.RESULTS_READY
+        if self.is_workflow:
+            # workflows need to have access to the executor directly
+            await self._process_workflow(executor=executor)  # type: ignore
         else:
-            self._state = State.STALE
+            if executor is None:
+                await self._processing_obj.process(
+                    self._current_inputs, self._current_outputs
+                )
+            else:
+                # raise NotImplementedError()
+                await executor.process(self)
+
+        self._current_inputs.items__enable()
+        # print(f"process finished: {self}")
+
+        self._update_state()
 
     @property
     def outputs(self) -> OutputItems:
@@ -218,8 +284,13 @@ class WorkflowModule(object):
 
     def __repr__(self):
 
-        return f"WorkflowModule(id={self.id})"
+        if self.execution_stage:
+            exc_stage = f" execution_stage={self.execution_stage}"
+        else:
+            exc_stage = ""
 
-    def __str__(self):
+        return f"{self.__class__.__name__}(id={self.full_id}{exc_stage})"
 
-        return self.id
+    # def __str__(self):
+    #
+    #     return self.id
