@@ -4,10 +4,15 @@ import typing
 from functools import partial
 
 from dharpa.data.core import DataItem, DataItems, DataSchema
-from dharpa.models import ProcessingConfig
+from dharpa.models import (
+    ModuleDetails,
+    ModuleState,
+    ProcessingConfig,
+    ValueItem,
+    ValueSchema,
+)
 from dharpa.processing.executors import Processor
 from dharpa.processing.processing_module import ProcessingModule
-from dharpa.workflows.events import State
 from dharpa.workflows.utils import get_auto_module_alias
 
 
@@ -105,7 +110,7 @@ class OutputItems(DataItems):
 
         super().__init__(**_data_items)
         # self._id: str = id
-        self._state: State = State.STALE
+        self._state: ModuleState = ModuleState.STALE
 
     # @property
     # def items__id(self):
@@ -139,9 +144,10 @@ class WorkflowModule(object):
 
         self._workflow_id: typing.Optional[str] = workflow_id
         self._alias: str = alias
-        self._state: State = State.STALE
+        self._state: ModuleState = ModuleState.STALE
         self._is_processing: bool = False
         self._processing_config: ProcessingConfig = _processing_config
+        self._execution_stage: typing.Optional[int] = None
 
         self._processing_obj: ProcessingModule = (
             self._processing_config.create_processing_module()
@@ -154,8 +160,8 @@ class WorkflowModule(object):
         for name, item in self._current_inputs.items():
             func = partial(self._input_changed, name)
             item.add_callback(func)
+
         self._current_outputs: OutputItems = OutputItems(**self.output_schema)
-        self._execution_stage: typing.Optional[int] = None
 
         # self._zmq_context: zmq.Context = zmq.Context.instance()
         # self._module_event_socket: zmq.Socket = self._zmq_context.socket(zmq.PUSH)
@@ -167,14 +173,18 @@ class WorkflowModule(object):
         return self._alias
 
     @property
-    def id(self) -> str:
+    def address(self) -> str:
         if self._workflow_id:
             return f"{self._workflow_id}.{self._alias}"
         else:
             return self._alias
 
     @property
-    def is_workflow(self) -> bool:
+    def module_type(self) -> str:
+        return self._processing_obj._module_name  # type: ignore
+
+    @property
+    def is_pipeline(self) -> bool:
         return False
 
     @property
@@ -209,30 +219,34 @@ class WorkflowModule(object):
     def inputs(self) -> InputItems:
         return self._current_inputs
 
+    @inputs.setter
+    def inputs(self, inputs: typing.Any):
+        self._current_inputs.set_values(**inputs)
+
     def _input_changed(self, input_name: str, new_value: typing.Any):
 
         self._update_state()
 
     @property
-    def state(self) -> State:
-        if self._state == State.STALE:
+    def state(self) -> ModuleState:
+        if self._state == ModuleState.STALE:
             if self.inputs.items__are_valid:
-                self._state = State.INPUTS_READY
+                self._state = ModuleState.INPUTS_READY
         return self._state
 
     @property
     def is_processing(self) -> bool:
         return self._is_processing
 
-    def _update_state(self) -> State:
+    def _update_state(self) -> ModuleState:
 
         # current = self._state
         if not self.inputs.items__are_valid:
-            new_state = State.STALE
+            new_state = ModuleState.STALE
         elif not self.outputs.items__are_valid:
-            new_state = State.INPUTS_READY
+            new_state = ModuleState.INPUTS_READY
         else:
-            new_state = State.RESULTS_READY
+            new_state = ModuleState.RESULTS_READY
 
         self._state = new_state
 
@@ -251,17 +265,17 @@ class WorkflowModule(object):
 
     async def process(self, executor: Processor = None):
 
-        if self._state != State.INPUTS_READY:
+        if self._state == ModuleState.STALE:
             raise Exception(
                 f"Can't start processing for module '{self.alias}': inputs not ready yet"
             )
 
-        self._state = State.RESULTS_INCOMING
+        self._state = ModuleState.RESULTS_INCOMING
         self._current_inputs.items__disable()
 
         # print(f"process started: {self} {executor}")
 
-        if self.is_workflow:
+        if self.is_pipeline:
             # workflows need to have access to the executor directly
             await self._process_workflow(executor=executor)  # type: ignore
         else:
@@ -282,14 +296,43 @@ class WorkflowModule(object):
     def outputs(self) -> OutputItems:
         return self._current_outputs
 
-    def to_dict(self) -> typing.Dict[str, typing.Any]:
+    def to_details(self) -> ModuleDetails:
+        inputs = {}
+        for k, v in self.inputs.items():
+            i = ValueItem(
+                schema=ValueSchema(type=v.schema.type, default=v.schema.default),
+                value=v.value,
+            )
+            inputs[k] = i
+        outputs = {}
+        for k, v in self.outputs.items():
+            o = ValueItem(
+                schema=ValueSchema(type=v.schema.type, default=v.schema.default),
+                value=v.value,
+            )
+            outputs[k] = o
 
-        result = {}
-        result["name"] = self.alias
+        return ModuleDetails(
+            alias=self.alias,
+            address=self.address,
+            type=self.module_type,
+            is_pipeline=self.is_pipeline,
+            execution_stage=self.execution_stage,
+            state=self.state,
+            inputs=inputs,
+            outputs=outputs,
+            doc=self.doc,
+        )
 
-        # TODO
+    def to_dict(self, exclude_none: bool = False) -> typing.Dict[str, typing.Any]:
 
-        return result
+        details = self.to_details()
+        return details.dict(by_alias=True, exclude_none=exclude_none)
+
+    def to_json(self, exclude_none: bool = False, **dump_kwargs: typing.Any) -> str:
+
+        details = self.to_details()
+        return details.json(by_alias=True, exclude_none=exclude_none, **dump_kwargs)
 
     def __repr__(self):
 
@@ -298,7 +341,7 @@ class WorkflowModule(object):
         else:
             exc_stage = ""
 
-        return f"{self.__class__.__name__}(id={self.id}{exc_stage})"
+        return f"{self.__class__.__name__}(alias={self.alias} workflow={self.is_pipeline}{exc_stage})"
 
     # def __str__(self):
     #

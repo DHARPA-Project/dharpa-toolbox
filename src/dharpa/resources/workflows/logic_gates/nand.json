@@ -18,5 +18,7 @@
     "not__y": "y"
   },
   "module_type_name": "nand",
-  "doc": "Returns 'True' if both inputs are 'False'."
+  "meta": {
+    "doc": "Returns 'True' if both inputs are 'False'."
+  }
 }

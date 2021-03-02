@@ -40,6 +40,7 @@ def find_all_processing_module_classes(
 ) -> typing.Mapping[str, Type["ProcessingModule"]]:
 
     from dharpa.processing.processing_module import ProcessingModule
+    from dharpa.workflows import workflow  # noqa
 
     if not modules_to_load:
         modules_to_load = DEFAULT_MODULES_TO_LOAD
@@ -75,6 +76,7 @@ def find_workflow_descriptions(
 
             path = os.path.join(root, filename)
             data = get_data_from_file(path)
+
             name = data.get(MODULE_TYPE_NAME_KEY, None)
             if name is None:
                 name = filename.split(".", maxsplit=1)[0]
@@ -90,11 +92,13 @@ def generate_workflow_processing_class_from_config(
     module_name: str, config: "ProcessingConfig"
 ) -> typing.Type["WorkflowProcessingModule"]:
 
-    _workflow_config = config.dict()["config"]
+    _workflow_config = config.dict()["module_config"]
 
-    def init(self, **config: typing.Any):
-        config.update(_workflow_config)
-        super(self.__class__, self).__init__(**config)
+    def init(self, **m_config: typing.Any):
+        m_config.update(_workflow_config)
+        m_config.setdefault("meta", {}).update(config.meta)
+
+        super(self.__class__, self).__init__(**m_config)
 
     from dharpa.workflows.workflow import WorkflowProcessingModule
     from dharpa.models import WorkflowProcessingModuleConfigDynamic
@@ -104,6 +108,9 @@ def generate_workflow_processing_class_from_config(
         "_processing_step_config_cls": WorkflowProcessingModuleConfigDynamic,
         "_module_name": module_name,
     }
+    d = config.meta.get("doc", None)
+    if d:
+        attrs["__doc__"] = d
 
     cls = type(
         f"Workflow{to_camel_case(module_name, capitalize=True)}",
@@ -144,11 +151,11 @@ def create_workflow_modules(
         elif isinstance(c, typing.Mapping):
 
             _c = dict(c)
-            m_id = _c.pop("id", None)
+            m_id = _c.pop("module_alias", None)
             input_links = _c.pop("input_links", None)
-            processing_config = ProcessingConfig.from_dict(**c)
+            processing_config = ProcessingConfig.from_dict(**_c)
 
-            if processing_config.is_workflow:
+            if processing_config.is_pipeline:
                 m = DharpaWorkflow(
                     alias=m_id,
                     workflow_id=workflow_id,

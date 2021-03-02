@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 import typing
+from enum import Enum
 
 from dharpa import DHARPA_MODULES
+from dharpa.data.core import DataType
 from dharpa.defaults import MODULE_TYPE_KEY
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, Extra, Field, root_validator, validator
 
 
 if typing.TYPE_CHECKING:
@@ -11,8 +13,19 @@ if typing.TYPE_CHECKING:
     from dharpa.workflows.workflow import DharpaWorkflow
 
 
+class ModuleState(Enum):
+
+    STALE = "stale"
+    INPUTS_READY = "inputs_ready"
+    RESULTS_INCOMING = "results_incoming"
+    RESULTS_READY = "results_ready"
+
+
 class WorkflowModuleModel(BaseModel):
     """A class to hold data that describes a workflow."""
+
+    class Config:
+        extra = Extra.forbid
 
     modules: typing.List[typing.Mapping[str, typing.Any]]
     input_aliases: typing.Mapping[str, str] = {}
@@ -35,7 +48,7 @@ class WorkflowModuleModel(BaseModel):
             "input_aliases": self.input_aliases,
             "output_aliases": self.output_aliases,
         }
-        proc_config = {MODULE_TYPE_KEY: "workflow", "config": config}
+        proc_config = {MODULE_TYPE_KEY: "workflow", "module_config": config}
 
         from dharpa.workflows.workflow import DharpaWorkflow
 
@@ -49,6 +62,9 @@ class ProcessingModuleConfig(BaseModel):
     This is stored in the `_processing_step_config_cls` attribute in each ProcessingModule class. By default,
     such a ProcessingModule is not configurable.
     """
+
+    # class Config:
+    #     extra = Extra.forbid
 
     pass
 
@@ -90,6 +106,8 @@ class WorkflowProcessingModuleConfigDynamic(ProcessingModuleConfig):
     def ensure_modules_format(cls, v):
         from dharpa.workflows.utils import create_workflow_modules
 
+        assert v is not None
+
         create_workflow_modules(*v)
         return v
 
@@ -102,14 +120,18 @@ class ProcessingConfig(BaseModel):
         if module_name is None:
             raise ValueError(f"No '{MODULE_TYPE_KEY}' provided: {data}")
 
-        config = data.get("config", {})
-        return ProcessingConfig(module_type=module_name, config=config)
+        config = data.get("module_config", {})
+        return ProcessingConfig(module_type=module_name, module_config=config)
+
+    class Config:
+        extra = Extra.forbid
 
     module_type: str
-    config: typing.Mapping[str, typing.Any] = {}
+    module_config: typing.Dict[str, typing.Any] = Field(default_factory=dict)
+    meta: typing.Dict[str, typing.Any] = Field(default_factory=dict)
 
     @property
-    def is_workflow(self) -> bool:
+    def is_pipeline(self) -> bool:
         return (
             DHARPA_MODULES.get_workflow(self.module_type, raise_exception=False)
             is not None
@@ -131,7 +153,7 @@ class ProcessingConfig(BaseModel):
 
         return values
 
-    @validator("config")
+    @validator("module_config")
     def ensure_config_valid(cls, v, values):
 
         module_type = values.get(MODULE_TYPE_KEY, None)
@@ -151,4 +173,64 @@ class ProcessingConfig(BaseModel):
     def create_processing_module(self) -> "ProcessingModule":
 
         processing_cls: typing.Type[ProcessingModule] = DHARPA_MODULES.get(self.module_type, True)  # type: ignore
-        return processing_cls(**self.config)
+        return processing_cls(meta=self.meta, **self.module_config)
+
+
+class ValueSchema(BaseModel):
+
+    type: DataType
+    default: typing.Any = None
+
+    class Config:
+        use_enum_values = True
+        extra = Extra.forbid
+
+
+class ValueItem(BaseModel):
+
+    item_schema: ValueSchema = Field(alias="schema")
+    value: typing.Any = None
+
+    class Config:
+        extra = Extra.forbid
+
+
+class ModuleDetails(BaseModel):
+
+    alias: str
+    address: str
+    type: str
+    is_pipeline: bool
+    state: ModuleState
+    inputs: typing.Dict[str, ValueItem]
+    outputs: typing.Dict[str, ValueItem]
+    execution_stage: typing.Optional[int] = None
+    doc: typing.Optional[str] = None
+    pipeline_structure: typing.Optional["WorkflowStructureDetails"] = None
+
+    class Config:
+        use_enum_values = True
+        extra = Extra.forbid
+
+
+class ChildModuleDetails(BaseModel):
+
+    module: ModuleDetails
+    input_connections: typing.Dict[str, str]
+    output_connections: typing.Dict[str, typing.List[str]]
+
+    class Config:
+        extra = Extra.forbid
+
+
+class WorkflowStructureDetails(BaseModel):
+
+    modules: typing.List[ChildModuleDetails]
+    workflow_input_connections: typing.Dict[str, typing.List[str]]
+    workflow_output_connections: typing.Dict[str, str]
+
+    class Config:
+        extra = Extra.forbid
+
+
+ModuleDetails.update_forward_refs()

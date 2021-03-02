@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "doc": "xxx"
+  },
+  "modules": [
+    {
+      "module_type": "dummy",
+      "module_config": {
+        "input_schema": {"a":  {"type":  "boolean"}},
+        "output_schema": {"y":  {"type":  "boolean"}},
+        "outputs": {
+          "y": "yy"
+        },
+        "delay": 2
+      }
+    }
+  ]
+}

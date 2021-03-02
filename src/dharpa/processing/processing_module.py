@@ -13,13 +13,38 @@ if typing.TYPE_CHECKING:
 """Global variable to store unique/used module ids per type."""
 
 
+def get_doc_from_module_class(cls: typing.Type) -> str:
+
+    doc = cls.__doc__
+    if not doc:
+        try:
+            doc = cls.__init__.__doc__  # type: ignore
+        except Exception:
+            pass
+
+    if not doc:
+        return "-- n/a --"
+    else:
+        doc = inspect.cleandoc(doc)
+        return doc
+
+
 class ProcessingModule(metaclass=ABCMeta):
 
     _processing_step_config_cls: typing.Type[
         ProcessingModuleConfig
     ] = ProcessingModuleConfig
 
-    def __init__(self, **config: typing.Any):
+    def __init__(
+        self,
+        meta: typing.Optional[typing.Mapping[str, typing.Any]] = None,
+        **config: typing.Any,
+    ):
+
+        if meta is None:
+            meta = {}
+
+        self._meta: typing.Mapping[str, typing.Any] = meta
 
         self._config: ProcessingModuleConfig = (
             self.__class__._processing_step_config_cls(**config)
@@ -33,6 +58,10 @@ class ProcessingModule(metaclass=ABCMeta):
     @property
     def config(self) -> typing.Mapping[str, typing.Any]:
         return self._config.dict()
+
+    @property
+    def meta(self) -> typing.Mapping[str, typing.Any]:
+        return self._meta
 
     @property
     def input_names(self) -> typing.Iterable[str]:
@@ -56,24 +85,18 @@ class ProcessingModule(metaclass=ABCMeta):
 
     @property
     def doc(self) -> str:
+
         if self._doc is None:
             self._doc = self._get_doc()
         return self._doc
 
     def _get_doc(self) -> str:
 
-        doc = self.__doc__
-        if not doc:
-            try:
-                doc = self.__init__.__doc__  # type: ignore
-            except Exception:
-                pass
+        if "doc" in self.meta.keys():
+            return self.meta["doc"]
 
-        if not doc:
-            return "-- n/a --"
-        else:
-            doc = inspect.cleandoc(doc)
-            return doc
+        doc = get_doc_from_module_class(self.__class__)
+        return doc
 
     @abstractmethod
     def _create_input_schema(self) -> typing.Mapping[str, DataSchema]:

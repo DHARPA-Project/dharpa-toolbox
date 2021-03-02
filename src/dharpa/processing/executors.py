@@ -72,7 +72,7 @@ class ThreadPoolProcessor(Processor):
 
         futures = []
         for m in modules:
-            if m.is_workflow:
+            if m.is_pipeline:
                 future = self.threadpool.submit(run, m.process, self)
             else:
                 future = self.threadpool.submit(run, m.process)

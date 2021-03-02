@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+import copy
 import logging
 import os
 import typing
@@ -132,9 +132,9 @@ class ModuleCollection(object):
         if self.get_workflow_configs()[key].get("config", None) is None:
             from dharpa.models import ProcessingConfig
 
-            pc = ProcessingConfig(
-                module_type="workflow", config=self._workflow_configs[key]["data"]
-            )
+            data = copy.copy(self._workflow_configs[key]["data"])
+            meta = data.pop("meta", {})
+            pc = ProcessingConfig(module_type="workflow", module_config=data, meta=meta)
             self._workflow_configs[key]["config"] = pc
 
         if self.get_workflow_configs()[key].get("cls", None) is None:
@@ -151,16 +151,17 @@ class ModuleCollection(object):
 
     @property
     def module_names(self) -> typing.Iterable[str]:
-        return self._module_classes.keys()
+        return sorted(self._module_classes.keys())
 
     @property
     def workflow_names(self) -> typing.Iterable[str]:
-        return self._workflow_configs.keys()
+        return sorted(self._workflow_configs.keys())
 
     @property
     def all_names(self) -> typing.Iterable[str]:
-        return list(self.get_module_classes().keys()) + list(
-            self.get_workflow_configs().keys()
+        return sorted(
+            list(self.get_module_classes().keys())
+            + list(self.get_workflow_configs().keys())
         )
 
 
@@ -171,7 +172,13 @@ def create_workflow(module_type: str, workflow_alias: typing.Optional[str] = Non
 
     from dharpa.workflows.workflow import DharpaWorkflow
     from dharpa.models import ProcessingConfig
+    from dharpa.workflows.modules import WorkflowModule
 
     config = ProcessingConfig(module_type=module_type)
-    w = DharpaWorkflow(processing_config=config, alias=workflow_alias)
+    if config.is_pipeline:
+        w: WorkflowModule = DharpaWorkflow(
+            processing_config=config, alias=workflow_alias
+        )
+    else:
+        w = WorkflowModule(processing_config=config, alias=workflow_alias)
     return w

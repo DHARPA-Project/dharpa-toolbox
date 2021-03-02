@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
+import typing
+
 import asyncclick as click
 import dharpa
-import zmq
-from asciinet import graph_to_ascii
-from dharpa.processing.executors import AsyncProcessor, ThreadPoolProcessor
-from dharpa.workflows.events import ModuleEvent, ModuleEventType
+from dharpa.models import ModuleState
+from dharpa.processing.processing_module import (
+    ProcessingModule,
+    get_doc_from_module_class,
+)
+from dharpa.utils import get_data_from_file
+from dharpa.workflows.workflow import DharpaWorkflow, WorkflowProcessingModule
+from rich import print as rich_print
 
 
 # workflow_descriptions_folder = (
@@ -13,153 +19,141 @@ from dharpa.workflows.events import ModuleEvent, ModuleEventType
 # load_workflows(workflow_descriptions_folder)
 
 
-# @app.command()
-# def list_modules():
-#     module_names = list_available_module_names()
-#
-#     for m in module_names:
-#         if m == "dharpa_workflow":
-#             continue
-#         print(m)
-
-
 @click.group()
 async def cli():
     pass
 
 
-@cli.group(name="execute")
-async def execute():
+@cli.group(name="module")
+async def module():
     pass
 
 
-@execute.command()
-async def test():
+@module.group()
+def run():
+    pass
 
-    executor = AsyncProcessor()
-    executor = ThreadPoolProcessor()
 
-    # from dharpa.data.core import DataType
-    from dharpa.workflows.workflow import DharpaWorkflow
+@module.group()
+def json_state():
+    pass
 
-    # find_all_processing_module_classes()
-    # dw: DharpaWorkflow = DharpaWorkflow.from_file("tests/workflows/logic_3.yaml")
 
-    dw: DharpaWorkflow = DharpaWorkflow.from_file(
-        "/home/markus/projects/dharpa/dharpa-toolbox/src/dharpa/resources/workflows/logic_gates/xor.json"
+for name in dharpa.DHARPA_MODULES.all_names:
+
+    short_help = f"execute module '{name}'"
+
+    @run.command(
+        name=name,
+        short_help=short_help,
+        context_settings=dict(
+            ignore_unknown_options=True,
+        ),
     )
+    @click.argument("path_to_inputs", nargs=1, required=False)
+    async def module_run_command(path_to_inputs, name=name):
 
-    dw: DharpaWorkflow = dharpa.create_workflow("xor")
-    print(dw)
+        dw: DharpaWorkflow = dharpa.create_workflow(name)
+        if path_to_inputs:
+            inputs = get_data_from_file(path_to_inputs)
+            dw.inputs = inputs
 
-    # wf: AssembledWorkflowBatch = dw.create_assembled_workflow()
+        if dw.state != ModuleState.STALE:
+            await dw.process()
+            print(dw.outputs.ALL)
+        else:
+            print("Not all inputs ready.")
 
-    # thread = Thread(target=wf.listen)
-    # thread.start()
-    # thread.join()
+    short_help = f"print the state module '{name}' as json"
 
-    # wf.listen()
-
-    dw.inputs.a = False
-    dw.inputs.b = True
-    # dw.inputs.and_1_1__b = True
-    # dw.inputs.and_1_2__a = True
-    # dw.inputs.and_1_2__b = True
-
-    await dw.process(executor=executor)
-    # await dw.process()
-    # dw.inputs.and_2__b = False
-    # dw.inputs.and_2__b = True
-    # dw.process()
-
-    print(dw.outputs.ALL)
-    print(dw.state)
-
-    # print(dw.doc)
-
-    #
-    graph = dw.structure.data_flow_graph
-    print(graph_to_ascii(graph))
-    #
-    graph = dw.structure.execution_graph
-    print(graph_to_ascii(graph))
-
-    # graph = dw.structure.data_flow_graph
-
-    # from grandalf.utils.nx import convert_nextworkx_graph_to_grandalf
-    #
-    # g = convert_nextworkx_graph_to_grandalf(graph)
-    # sug = SugiyamaLayout(g)
-    # sug.init_all()
-    # sug.draw()
-
-
-@execute.command()
-def input_values():
-
-    zmq_context: zmq.Context = zmq.Context.instance()
-    module_event_socket: zmq.Socket = zmq_context.socket(zmq.PUSH)
-    module_event_socket.connect("tcp://localhost:5555")
-
-    ev = ModuleEvent(
-        event_type=ModuleEventType.set_input,
-        module_id="workflow",
-        input_name="and_1__a",
-        value=True,
+    @json_state.command(  # noqa
+        name=name,
+        short_help=short_help,
+        context_settings=dict(
+            ignore_unknown_options=True,
+        ),
     )
-    module_event_socket.send_json(ev.to_dict())
-    ev = ModuleEvent(
-        event_type=ModuleEventType.set_input,
-        module_id="workflow",
-        input_name="and_1__b",
-        value=True,
-    )
-    module_event_socket.send_json(ev.to_dict())
+    @click.argument("path_to_inputs", nargs=1, required=False)
+    async def module_run_command(path_to_inputs, name=name):
+
+        dw: DharpaWorkflow = dharpa.create_workflow(name)
+        if path_to_inputs:
+            inputs = get_data_from_file(path_to_inputs)
+            dw.inputs = inputs
+
+        if dw.state != ModuleState.STALE:
+            await dw.process()
+
+        json_str = dw.to_json(indent=2)
+        print(json_str)
 
 
-# req = typer.Typer()
-# app.add_typer(req, name="req")
-# resp = typer.Typer()
-# app.add_typer(resp, name="resp")
-#
-# @req.command()
-# def start():
-#
-#     port = "5556"
-#     context = zmq.Context()
-#     socket = context.socket(zmq.PAIR)
-#     socket.bind("tcp://*:%s" % port)
-#
-#     i = 0
-#     while True:
-#         socket.send_string(f"Server message to client {i}")
-#         socket.send_string(f"Server message to client {i}")
-#         i = i + 1
-#         msg = socket.recv()
-#         print(msg)
-#         time.sleep(1)
-#
-# @resp.command()
-# def start():
-#     port = "5556"
-#     context = zmq.Context()
-#     socket = context.socket(zmq.PAIR)
-#     socket.connect("tcp://localhost:%s" % port)
-#
-#     i = 0
-#     while True:
-#         msg = socket.recv()
-#         print(msg)
-#         socket.send_string(f"client message to server {i}")
-#         i = i + 1
-#         socket.send_string(f"client message to server {i}")
-#         i = i + 1
-#         time.sleep(1)
+@module.command()
+@click.argument("module_names", nargs=-1)
+def info(module_names):
+
+    for module_name in module_names:
+
+        m_cls = dharpa.DHARPA_MODULES.get(module_name)
+        m = m_cls._processing_step_config_cls
+
+        rich_print(f"- [i]module[/i]: [b]{module_name}[/b]")
+        rich_print(f"  [i]doc[/i]: {get_doc_from_module_class(m_cls)}")
+        is_pipeline = issubclass(m_cls, WorkflowProcessingModule)
+        rich_print(f"  [i]is_pipeline[/i]: {is_pipeline}")
+
+        rich_print("  [i]configuration options:[/i]")
+        schema = m.schema()
+        for name in sorted(schema["properties"].keys()):
+            prop = schema["properties"][name]
+            desc = prop.get("description", None)
+            if desc:
+                n_str = f"    [i]{name}[/i]: {desc}"
+            else:
+                n_str = f"    [i]{name}[/i]:"
+            rich_print(n_str)
+            rich_print(f"      [i]type[/i]: {prop['type']}")
+            if prop.get("default", None) is not None:
+                rich_print(f"      [i]required[/i]: no (default: {prop['default']})")
+            else:
+                rich_print("      [i]required[/i]: yes")
 
 
-# exec_typer = create_typers_from_modules()
-# app.add_typer(exec_typer, name="run-module")
-# app.add_typer(desc_typer, name="describe-processing")
+@module.command()
+@click.option("--details", "-d", is_flag=True, help="whether to display module details")
+def list(details: bool = False):
+
+    for name in dharpa.DHARPA_MODULES.all_names:
+        if name == "workflow":
+            continue
+        m_cls: typing.Optional[
+            typing.Type[ProcessingModule]
+        ] = dharpa.DHARPA_MODULES.get(name)
+        if m_cls is None:
+            raise Exception(f"No module registered for: {name}")
+        m = m_cls._processing_step_config_cls  # type: ignore
+        rich_print(f"- [i]module[/i]: [b]{name}[/b]")
+        rich_print(f"  [i]doc[/i]: {get_doc_from_module_class(m_cls)}")
+        is_pipeline = issubclass(m_cls, WorkflowProcessingModule)
+        rich_print(f"  [i]is_pipeline[/i]: {is_pipeline}")
+        if details:
+            rich_print("  [i]configuration options:[/i]")
+            schema = m.schema()
+            for name in sorted(schema["properties"].keys()):
+                prop = schema["properties"][name]
+                desc = prop.get("description", None)
+                if desc:
+                    n_str = f"    [i]{name}[/i]: {desc}"
+                else:
+                    n_str = f"    [i]{name}[/i]:"
+                rich_print(n_str)
+                rich_print(f"      [i]type[/i]: {prop['type']}")
+                if prop.get("default", None) is not None:
+                    rich_print(
+                        f"      [i]required[/i]: no (default: {prop['default']})"
+                    )
+                else:
+                    rich_print("      [i]required[/i]: yes")
 
 
 def main():

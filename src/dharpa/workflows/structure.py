@@ -4,6 +4,7 @@ from functools import lru_cache
 
 import networkx as nx
 from dharpa.data.core import DataSchema
+from dharpa.models import ChildModuleDetails, WorkflowStructureDetails
 from dharpa.workflows.modules import WorkflowModule
 from dharpa.workflows.utils import create_workflow_modules
 
@@ -32,6 +33,7 @@ class ModuleLink(DataLink):
     def module_id(self) -> str:
         return self._module_id
 
+    @property
     def id(self) -> str:
         return f"{self.module_id}.{self.value_name}"
 
@@ -70,11 +72,11 @@ class ModuleOutputLink(ModuleLink):
     def __init__(self, module_id: str, value_name: str, schema: DataSchema):
         super().__init__(module_id=module_id, value_name=value_name, schema=schema)
         self._connected_inputs: typing.List[ModuleInputLink] = []
-        self._connected_workflow_outputs: typing.List[WorkflowOutputLink] = []
+        self._connected_workflow_output: typing.Optional[WorkflowOutputLink] = None
 
     @property
-    def workflow_outputs(self) -> typing.Iterable["WorkflowOutputLink"]:
-        return self._connected_workflow_outputs
+    def workflow_output(self) -> typing.Optional["WorkflowOutputLink"]:
+        return self._connected_workflow_output
 
     @property
     def connected_inputs(self) -> typing.Iterable["ModuleInputLink"]:
@@ -87,7 +89,9 @@ class ModuleOutputLink(ModuleLink):
         if isinstance(target, ModuleInputLink):
             self._connected_inputs.append(target)
         elif isinstance(target, WorkflowOutputLink):
-            self._connected_workflow_outputs.append(target)
+            if self._connected_workflow_output is not None:
+                raise Exception(f"Workflow output already set for: {self}")
+            self._connected_workflow_output = target
         else:
             raise TypeError(f"Invalid target type: {type(target)}")
 
@@ -440,3 +444,50 @@ class WorkflowStructure(object):
         self._execution_stages = execution_stages
 
         self._get_node_of_type.cache_clear()
+
+    def to_details(self) -> WorkflowStructureDetails:
+
+        modules = []
+        workflow_inputs: typing.Dict[str, typing.List[str]] = {}
+        workflow_outputs: typing.Dict[str, str] = {}
+
+        for m_id, details in self.module_details.items():
+            m_det = details["workflow_module"].to_details()
+
+            input_connections = {}
+            for k, v in details["inputs"].items():
+                if v.connected_item.link_type == WorkflowInputLink.link_type:
+                    input_connections[k] = v.connected_item.name
+                    workflow_inputs.setdefault(v.connected_item.name, []).append(v.id)
+                elif v.connected_item.link_type == ModuleOutputLink.link_type:
+                    input_connections[k] = v.connected_item.id
+                else:
+                    raise TypeError(
+                        f"Invalid connection type: {type(v.connected_item)}"
+                    )
+
+            output_connections: typing.Dict[str, typing.Any] = {}
+            for k, v in details["outputs"].items():
+                for connected_item in v.connected_inputs:
+                    output_connections.setdefault(k, []).append(connected_item.id)
+                if v.workflow_output:
+                    output_connections.setdefault(k, []).append(v.workflow_output.name)
+                    workflow_outputs[v.workflow_output.name] = v.id
+
+            modules.append(
+                ChildModuleDetails(
+                    module=m_det,
+                    input_connections=input_connections,
+                    output_connections=output_connections,
+                )
+            )
+
+        return WorkflowStructureDetails(
+            modules=modules,
+            workflow_input_connections=workflow_inputs,
+            workflow_output_connections=workflow_outputs,
+        )
+
+    def to_dict(self) -> typing.Dict[str, typing.Any]:
+
+        return self.to_details().dict()

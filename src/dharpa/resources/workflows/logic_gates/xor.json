@@ -24,5 +24,7 @@
     "and__y": "y"
   },
   "module_type_name": "xor",
-  "doc": "Returns 'True' if exactly one of it's two inputs is 'True'."
+  "meta": {
+    "doc":  "Returns 'True' if exactly one of it's two inputs is 'True'."
+  }
 }

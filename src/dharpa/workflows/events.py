@@ -5,14 +5,6 @@ from enum import Enum
 from pydantic import BaseModel
 
 
-class State(Enum):
-
-    STALE = 0
-    INPUTS_READY = 1
-    RESULTS_INCOMING = 2
-    RESULTS_READY = 3
-
-
 class StateChangedEvent(BaseModel):
 
     module_id: str

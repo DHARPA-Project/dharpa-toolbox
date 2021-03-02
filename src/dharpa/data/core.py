@@ -8,7 +8,7 @@ from enum import Enum
 
 class DataType(Enum):
     def __new__(cls, *args, **kwds):
-        value = len(cls.__members__) + 1
+        value = args[0]["id"]
         obj = object.__new__(cls)
         obj._value_ = value
         return obj
@@ -18,20 +18,25 @@ class DataType(Enum):
         for k, v in type_map.items():
             setattr(self, k, v)
 
-    integer = {"python": int}
-    string = {"python": str}
-    dict = {"python": dict}
-    boolean = {"python": bool}
+    integer = {"id": "integer", "python": int}
+    string = {"id": "string", "python": str}
+    dict = {"id": "dict", "python": dict}
+    boolean = {"id": "boolean", "python": bool}
 
 
 class DataSchema(object):
     def __init__(
-        self, type: DataType, default: typing.Any = None, nullable: bool = False
+        self,
+        type: typing.Union[DataType, str],
+        default: typing.Any = None,
+        nullable: bool = False,
     ):
 
+        if isinstance(type, str):
+            type = DataType[type]
+
         self._type: DataType = type
-        self._default: typing.Any = default
-        self._nullable: bool = nullable
+        self._default_value: typing.Any = default
 
     @property
     def type(self) -> DataType:
@@ -39,16 +44,19 @@ class DataSchema(object):
 
     @property
     def default(self) -> typing.Any:
-        return self._default
-
-    @property
-    def nullable(self) -> bool:
-        return self._nullable
+        return self._default_value
 
     def create_data_item(self) -> "DataItem":
 
         item = DataItem(self)
         return item
+
+    def to_dict(self) -> typing.Dict[str, typing.Any]:
+
+        result = {"type": self.type.name}
+        if self.default is not None:
+            result["default"] = self.default
+        return result
 
     def __repr__(self):
 
@@ -197,11 +205,11 @@ class DataItems(collections.abc.MutableMapping):
                 return False
         return True
 
-    def items__to_dict(self) -> typing.Dict[str, typing.Any]:
+    def items__to_dict(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
 
         result = {}
         for k, v in self.items():
-            result[k] = v.value
+            result[k] = {"value": v.value, "schema": v.schema.to_dict()}
 
         return result
 

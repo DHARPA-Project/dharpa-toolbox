@@ -9,14 +9,18 @@ import zmq
 from dharpa.data.core import DataItem, DataSchema
 from dharpa.defaults import MODULE_TYPE_KEY
 from dharpa.models import (
+    ModuleDetails,
+    ModuleState,
     ProcessingConfig,
     ProcessingModuleConfig,
+    ValueItem,
+    ValueSchema,
     WorkflowModuleModel,
     WorkflowProcessingModuleConfig,
 )
 from dharpa.processing.executors import Processor
 from dharpa.processing.processing_module import ProcessingModule
-from dharpa.workflows.events import ModuleEvent, ModuleEventType, State
+from dharpa.workflows.events import ModuleEvent, ModuleEventType
 from dharpa.workflows.modules import InputItems, OutputItems, WorkflowModule
 from dharpa.workflows.structure import WorkflowStructure
 from dharpa.workflows.utils import create_workflow_modules
@@ -87,7 +91,7 @@ class AssembledWorkflowInteractive(object):
             for output_name, link in module_outputs.items():
                 output_item = module_obj.outputs[output_name]
 
-                for wo in link.workflow_outputs:
+                for wo in link.workflow_output:
                     wo_item = structure_outputs[wo.value_name]
                     output_item.add_callback(wo_item.set_value)
 
@@ -127,7 +131,6 @@ class AssembledWorkflowInteractive(object):
                 else:
                     raise NotImplementedError()
 
-                print("yyy")
         except Exception as e:
             print(e)
 
@@ -171,6 +174,10 @@ class AssembledWorkflowBatch(object):
         self._outputs: OutputItems = None  # type: ignore
 
         self._init_obj(init_inputs=init_inputs)
+
+    @property
+    def structure(self) -> WorkflowStructure:
+        return self._structure
 
     def _init_obj(self, init_inputs: typing.Optional[InputItems] = None):
 
@@ -219,8 +226,8 @@ class AssembledWorkflowBatch(object):
             for output_name, link in module_outputs.items():
                 output_item = module_obj.outputs[output_name]
 
-                for wo in link.workflow_outputs:
-                    wo_item = structure_outputs[wo.value_name]
+                if link.workflow_output:
+                    wo_item = structure_outputs[link.workflow_output.value_name]
                     output_item.add_callback(wo_item.set_value)
 
         self._inputs = structure_inputs
@@ -242,11 +249,11 @@ class AssembledWorkflowBatch(object):
             for m_id in stage:
                 module = self._structure.get_module(m_id)
 
-                if module.state == State.RESULTS_READY:
+                if module.state == ModuleState.RESULTS_READY:
                     continue
-                elif module.state == State.RESULTS_INCOMING:
+                elif module.state == ModuleState.RESULTS_INCOMING:
                     raise Exception("Processing currently")
-                elif module.state == State.INPUTS_READY:
+                elif module.state == ModuleState.INPUTS_READY:
                     if executor is None:
                         await module.process()
                     else:
@@ -268,13 +275,17 @@ class WorkflowProcessingModule(ProcessingModule):
         ProcessingModuleConfig
     ] = WorkflowProcessingModuleConfig
 
-    def __init__(self, **config: typing.Any):
+    def __init__(
+        self,
+        meta: typing.Optional[typing.Mapping[str, typing.Any]] = None,
+        **config: typing.Any,
+    ):
 
         self._config: WorkflowProcessingModuleConfig
 
         self._workflow_structure: typing.Optional[WorkflowStructure] = None
         self._workflow_id: typing.Optional[str] = None
-        super().__init__(**config)
+        super().__init__(meta=meta, **config)
 
     def set_workflow_id(self, workflow_id: str):
         self._workflow_structure = None
@@ -333,17 +344,19 @@ class WorkflowProcessingModule(ProcessingModule):
         for k, v in workflow.outputs.items():
             outputs[k].value = v.value
 
-    def _get_doc(self) -> str:
+        self._workflow_structure = workflow.structure
 
-        result = "Steps:"
-
-        for i, stage in enumerate(self.structure.execution_stages):
-            result = f"{result}\n\nStage {i}:\n"
-            for m_id in stage:
-                m = self.structure.get_module(m_id)
-                result = f"{result}\n\t{m.alias}: {m.doc}"
-
-        return result
+    # def _get_doc(self) -> str:
+    #
+    # result = "Steps:"
+    #
+    # for i, stage in enumerate(self.structure.execution_stages):
+    #     result = f"{result}\n\nStage {i}:\n"
+    #     for m_id in stage:
+    #         m = self.structure.get_module(m_id)
+    #         result = f"{result}\n\t{m.alias}: {m.doc}"
+    #
+    # return result
 
 
 class DharpaWorkflow(WorkflowModule):
@@ -375,7 +388,6 @@ class DharpaWorkflow(WorkflowModule):
             config = yaml.safe_load(content)
 
         m_conf = WorkflowModuleModel(**config)
-        print(m_conf)
         if m_conf.module_type_name is None:
             m_conf.module_type_name = path.name.split(".", maxsplit=1)[0]
 
@@ -413,6 +425,7 @@ class DharpaWorkflow(WorkflowModule):
             input_links=input_links,
             workflow_id=workflow_id,
         )
+
         self._processing_obj.set_workflow_id(self.alias)
 
         if not isinstance(self._processing_obj, WorkflowProcessingModule):
@@ -430,16 +443,39 @@ class DharpaWorkflow(WorkflowModule):
         )
 
     @property
-    def is_workflow(self) -> bool:
+    def is_pipeline(self) -> bool:
         return True
 
     @property
     def structure(self) -> WorkflowStructure:
         return self._processing_obj.structure  # type: ignore
 
-    @property
-    def doc(self) -> str:
-        if self._workflow_doc:
-            return self._workflow_doc
-        else:
-            return self._processing_obj.doc
+    def to_details(self) -> ModuleDetails:
+
+        inputs = {}
+        for k, v in self.inputs.items():
+            i = ValueItem(
+                schema=ValueSchema(type=v.schema.type, default=v.schema.default),
+                value=v.value,
+            )
+            inputs[k] = i
+        outputs = {}
+        for k, v in self.outputs.items():
+            o = ValueItem(
+                schema=ValueSchema(type=v.schema.type, default=v.schema.default),
+                value=v.value,
+            )
+            outputs[k] = o
+
+        details = super().to_details()
+        structure_details = self.structure.to_details()
+        details.pipeline_structure = structure_details
+
+        return details
+
+    # @property
+    # def doc(self) -> str:
+    #     if self._workflow_doc:
+    #         return self._workflow_doc
+    #     else:
+    #         return self._processing_obj.doc

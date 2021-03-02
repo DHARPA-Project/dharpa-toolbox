@@ -132,7 +132,9 @@ def get_subclass_map(
             raise Exception(f"Duplicate subclass key: {key}")
         result[key] = sc
 
-    return result
+    return {
+        key: value for key, value in sorted(result.items(), key=lambda item: item[0])
+    }
 
 
 def get_data_from_file(path: Union[str, Path]):

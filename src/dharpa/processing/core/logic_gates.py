@@ -6,11 +6,15 @@ from dharpa.data.core import DataSchema, DataType
 from dharpa.models import ProcessingModuleConfig
 from dharpa.processing.processing_module import ProcessingModule
 from dharpa.workflows.modules import InputItems, OutputItems
+from pydantic import Field
 
 
 class LogicProcessingModuleConfig(ProcessingModuleConfig):
 
-    delay: float = 2
+    delay: float = Field(
+        default=0,
+        description="the delay in seconds from processing start to when the output is returned.",
+    )
 
 
 class LogicProcessingModule(ProcessingModule):
