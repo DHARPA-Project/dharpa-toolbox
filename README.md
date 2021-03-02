@@ -28,23 +28,23 @@ Documentation still to be done.
 
 Notes:
 
-- if using *direnv*, adjust the Python version in ``.envrc`` (should not be necessary)
-
-``` console
-git clone https://gitlab.com/frkl/dharpa-toolbox
-cd dharpa-toolbox
-mv .envrc.disabled .envrc
-direnv allow   # if using direnv, otherwise activate virtualenv
-make init
-```
-
 - if not using *direnv*, you have to setup and activate your Python virtualenv yourself, manually, before running ``make init``, something like:
 
 ```console
-git clone https://gitlab.com/frkl/dharpa-toolbox
+git clone https://github.com/DHARPA-Project/dharpa-toolbox
 cd dharpa-toolbox
 python3 -m venv .venv
 source .venv/bin/activate
+make init
+```
+
+- if using *direnv*, adjust the Python version in ``.envrc`` (should not be necessary)
+
+``` console
+git clone https://github.com/DHARPA-Project/dharpa-toolbox
+cd dharpa-toolbox
+mv .envrc.disabled .envrc
+direnv allow   # if using direnv, otherwise activate virtualenv
 make init
 ```
 
