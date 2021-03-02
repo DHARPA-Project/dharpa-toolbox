@@ -14,17 +14,15 @@ repos:
 #    hooks:
 #    -   id: isort
 
-- repo: https://github.com/miki725/importanize/
-  rev: 'master'
+- repo: https://github.com/pycqa/isort
+  rev: 5.7.0
   hooks:
-  - id: importanize
-    args: [--verbose]
+    - id: isort
 
-- repo: https://github.com/ambv/black
-  rev: stable
+- repo: https://github.com/psf/black
+  rev: 20.8b1
   hooks:
-  - id: black
-    language_version: python3.8
+    - id: black
 
 - repo: https://github.com/pre-commit/mirrors-mypy
   rev: 'master'  # Use the sha / tag you want to point at
@@ -41,7 +39,7 @@ repos:
   - id: check-merge-conflict
   - id: check-xml
   - id: check-yaml
-    exclude: 'tests/*'
+    exclude: 'tests*'
   - id: debug-statements
   - id: end-of-file-fixer
     exclude: .cruft.json
