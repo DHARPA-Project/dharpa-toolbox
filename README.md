@@ -113,7 +113,7 @@ To get a list of all of those, use the ``list`` sub-command (use the ``--details
 
 #### module info
 
-To display information about one or several specific modules or workflows, use ``info``:
+To display information about one or several specific modules or workflows, use ``info`` (this is currently not really useful):
 
 ```shell
 ➜ dharpa-toolbox module info xor
@@ -448,7 +448,7 @@ processing finished: nand.nand
       └──────────────────┘  
 ```
 
-Or, with the structure:
+As before, we can choose to also look at the internal structure:
 
 ```shell
 ➜ dharpa-toolbox module state-graph nand --show-structure examples/inputs_logic_all_false.json
@@ -516,3 +516,8 @@ Try that without inputs (or the partial input file ``examples/inputs_logic_one_i
 the state of the internal structure.
 
 ### Python library
+
+Check out the two example notebooks:
+
+ - [xor](https://github.com/DHARPA-Project/dharpa-toolbox/blob/develop/dev/xor.ipynb)
+- [topic-modelling-dummy](https://github.com/DHARPA-Project/dharpa-toolbox/blob/develop/dev/topic_modelling_dummy.ipynb)
