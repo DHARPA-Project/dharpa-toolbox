@@ -1,0 +1,10 @@
+{
+  "path_to_data": "xxx",
+  "parse_date": false,
+  "parse_isin": false,
+  "min_year": 1974,
+  "max_year": 1999,
+  "filter_tokens": false,
+  "tokenize": "word",
+  "lowercase": true
+}

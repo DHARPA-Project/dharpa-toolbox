@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import collections
+import sys
 import typing
 from functools import partial
 
@@ -265,32 +266,47 @@ class WorkflowModule(object):
 
     async def process(self, executor: Processor = None):
 
-        if self._state == ModuleState.STALE:
-            raise Exception(
-                f"Can't start processing for module '{self.alias}': inputs not ready yet"
-            )
+        print(f"processing started: {self.address}", file=sys.stderr)
 
         self._state = ModuleState.RESULTS_INCOMING
         self._current_inputs.items__disable()
 
         # print(f"process started: {self} {executor}")
 
-        if self.is_pipeline:
-            # workflows need to have access to the executor directly
-            await self._process_workflow(executor=executor)  # type: ignore
-        else:
-            if executor is None:
-                await self._processing_obj.process(
-                    self._current_inputs, self._current_outputs
-                )
+        try:
+
+            if self.is_pipeline:
+                # workflows need to have access to the executor directly
+                await self._process_workflow(executor=executor)  # type: ignore
             else:
-                # raise NotImplementedError()
-                await executor.process(self)
+                if executor is None:
+                    await self._processing_obj.process(
+                        self._current_inputs, self._current_outputs
+                    )
+                else:
+                    if self._state == ModuleState.STALE:
+                        missing = []
+                        for k, v in self.inputs.items():
+                            if v.value is None:
+                                missing.append(k)
+                        raise Exception(
+                            f"Can't start processing for module '{self.alias}', inputs not ready yet: {missing}"
+                        )
 
-        self._current_inputs.items__enable()
-        # print(f"process finished: {self}")
+                    # raise NotImplementedError()
+                    await executor.process(self)
 
-        self._update_state()
+            self._current_inputs.items__enable()
+            # print(f"process finished: {self}")
+
+            self._update_state()
+        except Exception as e:
+            print(
+                f"processing '{self.address}' finished with error: {e}", file=sys.stderr
+            )
+            raise e
+        finally:
+            print(f"processing finished: {self.address}", file=sys.stderr)
 
     @property
     def outputs(self) -> OutputItems:

@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "doc": "topic modelling workflow"
+  },
+  "modules": [
+    {
+      "module_alias": "data_upload",
+      "module_type": "dummy",
+      "module_config": {
+        "doc": "Data onboarding",
+        "input_schema": {
+          "path_to_data":  {"type":  "string"},
+          "parse_date": {"type":  "boolean", "default":  false},
+          "parse_isin": {"type":  "boolean", "default":  false}
+        },
+        "output_schema": {"corpus":  {"type":  "table"}},
+        "outputs": {
+          "corpus": [{"id": "one","content":  "Hello World!", "year": 1974}, {"id": "two", "content": "Hello Dharpa!", "year": 1999}, {"id":  "three", "content":  "Goodbye World!", "year": 2020}]
+        },
+        "delay": 0.5
+      }
+    },
+    {
+      "module_alias": "select_subset",
+      "module_type": "dummy",
+      "module_config": {
+        "doc": "Select a subset of the corpus.",
+        "input_schema": {
+          "corpus": {"type": "table"},
+          "min_year": {"type": "integer"},
+          "max_year": {"type": "integer"}
+        },
+        "output_schema": {"corpus":  {"type":  "table"}},
+        "outputs": {
+          "corpus": [{"id": "one","content":  "Hello World!", "year": 1974}, {"id": "two", "content": "Hello Dharpa!", "year": 1999}]
+        },
+        "delay": 1
+      },
+      "input_links": {
+        "corpus": "data_upload.corpus"
+      }
+    },
+    {
+      "module_alias": "pre_process",
+      "module_type": "dummy",
+      "module_config": {
+        "doc": "Preprocess the corpus.",
+        "input_schema": {
+          "corpus": {"type":  "table"},
+          "tokenize": {
+            "type": "string",
+            "default": "word"
+          },
+          "lowercase": {
+            "type": "boolean",
+            "default": true
+          },
+          "filter_tokens": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "output_schema": {
+          "corpus": {
+            "type": "table"
+          }
+        },
+        "outputs": {
+          "corpus": [{"id": "one","content":  ["hello", "world"], "year": 1974}, {"id": "two", "content": ["hello", "dharpa"], "year": 1999}]
+        },
+        "delay": 1
+      },
+      "input_links": {
+          "corpus": "select_subset.corpus"
+        }
+    }
+  ],
+  "input_aliases": {
+    "data_upload__path_to_data": "path_to_data",
+    "data_upload__parse_date": "parse_date",
+    "data_upload__parse_isin": "parse_isin",
+    "select_subset__min_year": "min_year",
+    "select_subset__max_year": "max_year",
+    "pre_process__tokenize": "tokenize",
+    "pre_process__lowercase": "lowercase",
+    "pre_process__filter_tokens": "filter_tokens"
+  },
+  "output_aliases": {
+      "pre_process__corpus": "corpus"
+  }
+
+}

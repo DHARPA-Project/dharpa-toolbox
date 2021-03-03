@@ -6,7 +6,6 @@ import typing
 
 from dharpa.defaults import DHARPA_TOOLBOX_DEFAULT_WORKFLOWS_FOLDER
 
-
 if typing.TYPE_CHECKING:
     from dharpa.processing.processing_module import ProcessingModule
     from dharpa.workflows.workflow import WorkflowProcessingModule
@@ -170,14 +169,16 @@ DHARPA_MODULES = ModuleCollection()
 
 def create_workflow(module_type: str, workflow_alias: typing.Optional[str] = None):
 
-    from dharpa.workflows.workflow import DharpaWorkflow
     from dharpa.models import ProcessingConfig
     from dharpa.workflows.modules import WorkflowModule
+    from dharpa.workflows.workflow import DharpaWorkflow
 
     config = ProcessingConfig(module_type=module_type)
     if config.is_pipeline:
+        if workflow_alias is None:
+            workflow_alias = config.module_type
         w: WorkflowModule = DharpaWorkflow(
-            processing_config=config, alias=workflow_alias
+            processing_config=config, alias=workflow_alias, workflow_id=workflow_alias
         )
     else:
         w = WorkflowModule(processing_config=config, alias=workflow_alias)

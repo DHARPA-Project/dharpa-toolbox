@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import networkx as nx
 import os
 import typing
 import yaml
@@ -13,9 +14,11 @@ from dharpa.models import (
     ProcessingConfig,
     ProcessingModuleConfig,
     ValueItem,
+    ValueNode,
     ValueSchema,
     WorkflowModuleModel,
     WorkflowProcessingModuleConfig,
+    WorkflowStructureDetails,
 )
 from dharpa.processing.executors import Processor
 from dharpa.processing.processing_module import ProcessingModule
@@ -108,7 +111,7 @@ from dharpa.workflows.structure import WorkflowStructure
 #
 #         try:
 #             while True:
-#                 # print("wating")
+#                 # w("wating")
 #                 event_data = self._module_event_socket.recv_json()
 #                 event = ModuleEvent.from_dict(**event_data)
 #
@@ -154,14 +157,14 @@ class AssembledWorkflowBatch(object):
     def __init__(
         self,
         *module_configs: typing.Mapping,
-        workflow_id: typing.Optional[str],
+        workflow_id: str,
         init_inputs: typing.Optional[InputItems] = None,
         input_aliases: typing.Mapping[str, str] = None,
         output_aliases: typing.Mapping[str, str] = None,
     ):
 
         self._module_configs: typing.Iterable[typing.Mapping] = module_configs
-        self._workflow_id: typing.Optional[str] = workflow_id
+        self._workflow_id: str = workflow_id
         self._input_aliases: typing.Optional[typing.Mapping[str, str]] = input_aliases
         self._output_aliases: typing.Optional[typing.Mapping[str, str]] = output_aliases
 
@@ -274,13 +277,16 @@ class WorkflowProcessingModule(ProcessingModule):
     def __init__(
         self,
         meta: typing.Optional[typing.Mapping[str, typing.Any]] = None,
+        workflow_id: typing.Optional[str] = None,
         **config: typing.Any,
     ):
 
+        if workflow_id is None:
+            raise Exception("Workflow id not set")
         self._config: WorkflowProcessingModuleConfig
 
         self._workflow_structure: typing.Optional[WorkflowStructure] = None
-        self._workflow_id: typing.Optional[str] = None
+        self._workflow_id: typing.Optional[str] = workflow_id
         super().__init__(meta=meta, **config)
 
     def set_workflow_id(self, workflow_id: str):
@@ -290,6 +296,8 @@ class WorkflowProcessingModule(ProcessingModule):
     @property
     def structure(self) -> WorkflowStructure:
         if self._workflow_structure is None:
+            if self._workflow_id is None:
+                raise Exception("Workflow id not set")
             self._workflow_structure = WorkflowStructure(
                 *self._config.modules,  # type: ignore
                 input_aliases=self._config.input_aliases,
@@ -310,7 +318,7 @@ class WorkflowProcessingModule(ProcessingModule):
 
         workflow = AssembledWorkflowBatch(
             *self._config.modules,
-            workflow_id=workflow_id,
+            workflow_id=workflow_id,  # type: ignore
             init_inputs=inputs,
             input_aliases=self._config.input_aliases,
             output_aliases=self._config.output_aliases,
@@ -330,11 +338,12 @@ class WorkflowProcessingModule(ProcessingModule):
 
         workflow = AssembledWorkflowBatch(
             *self._config.modules,
-            workflow_id=workflow_id,
+            workflow_id=workflow_id,  # type: ignore
             init_inputs=inputs,
             input_aliases=self._config.input_aliases,
             output_aliases=self._config.output_aliases,
         )
+
         await workflow.process_workflow(executor=executor)
 
         for k, v in workflow.outputs.items():
@@ -388,7 +397,7 @@ class DharpaWorkflow(WorkflowModule):
             m_conf.module_type_name = path.name.split(".", maxsplit=1)[0]
 
         if workflow_alias is None:
-            workflow_alias = f"workflow_{m_conf.module_type_name}"
+            workflow_alias = m_conf.module_type_name
 
         wf = m_conf.create_workflow(alias=workflow_alias)
         return wf
@@ -403,6 +412,9 @@ class DharpaWorkflow(WorkflowModule):
         workflow_id: str = None,
         doc: str = None,
     ):
+
+        if workflow_id is None:
+            raise Exception("Workflow id not set")
 
         if isinstance(processing_config, typing.Mapping):
             p_type = processing_config.get(MODULE_TYPE_KEY, None)
@@ -468,6 +480,90 @@ class DharpaWorkflow(WorkflowModule):
         details.pipeline_structure = structure_details
 
         return details
+
+    def create_state_graph(self, show_structure: bool = False):
+
+        graph = nx.DiGraph()
+
+        details = self.to_details()
+        structure: WorkflowStructureDetails = details.pipeline_structure  # type: ignore
+
+        if show_structure:
+
+            input_nodes = {}
+            output_nodes = {}
+            for module in structure.modules:
+                graph.add_node(module.module)
+                for input_name, value in module.module.inputs.items():
+                    address = f"{module.module.alias}.{input_name}"
+                    node = ValueNode(
+                        module=module.module,
+                        value_name=input_name,
+                        item=value,
+                        type="input",
+                    )
+                    input_nodes[address] = node
+                    graph.add_node(node)
+                    graph.add_edge(node, module.module)
+
+                for output_name, value in module.module.outputs.items():
+                    address = f"{module.module.alias}.{output_name}"
+                    node = ValueNode(
+                        module=module.module,
+                        value_name=output_name,
+                        item=value,
+                        type="output",
+                    )
+                    output_nodes[address] = node
+                    graph.add_node(node)
+                    graph.add_edge(module.module, node)
+
+            for module in structure.modules:
+
+                for name, input_connection in module.input_connections.items():
+                    if "__parent__" not in input_connection:
+                        input_node = input_nodes[f"{module.module.alias}.{name}"]
+                        output_node = output_nodes[f"{input_connection}"]
+                        graph.add_edge(output_node, input_node)
+
+            for (
+                workflow_input,
+                connections,
+            ) in structure.workflow_input_connections.items():
+                for connection in connections:
+                    input_node = input_nodes[connection]
+                    graph.add_edge(
+                        f"user input: {workflow_input}\nvalue: {input_node.item.value}",
+                        input_node,
+                    )
+
+            for (
+                workflow_output,
+                connection,
+            ) in structure.workflow_output_connections.items():
+                output_node = output_nodes[connection]
+                graph.add_edge(
+                    output_node,
+                    f"workflow output: {workflow_output}\nvalue: {output_node.item.value}",
+                )
+        else:
+            _module = f"module: {self.alias}\nstate: {self.state.value}"
+            graph.add_node(_module)
+
+            for name, value in self.inputs.items():
+                graph.add_edge(f"user input: {name}\nvalue: {value.value}", _module)
+
+            for name, value in self.outputs.items():
+                graph.add_edge(
+                    _module, f"workflow output: {name}\nvalue: {value.value}"
+                )
+
+            # for name, output_connections in module.output_connections.items():
+            #     for output_connection in output_connections:
+            #         if "__parent__" in output_connection:
+            #             continue
+            #         else:
+        return graph
 
     # @property
     # def doc(self) -> str:

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
+import networkx as nx
 import typing
 from functools import lru_cache
 
-import networkx as nx
 from dharpa.data.core import DataSchema
 from dharpa.models import ChildModuleDetails, WorkflowStructureDetails
 from dharpa.workflows.modules import WorkflowModule
@@ -34,7 +34,7 @@ class ModuleLink(DataLink):
         return self._module_id
 
     @property
-    def id(self) -> str:
+    def name(self) -> str:
         return f"{self.module_id}.{self.value_name}"
 
 
@@ -157,12 +157,13 @@ class WorkflowStructure(object):
     def __init__(
         self,
         *modules: typing.Union[typing.Mapping, WorkflowModule],
-        workflow_id: str = None,
+        workflow_id: str,
         input_aliases: typing.Mapping[str, str] = None,
         output_aliases: typing.Mapping[str, str] = None,
         add_all_workflow_outputs: bool = False,
     ):
 
+        self._workflow_id: str = workflow_id
         self._workflow_modules: typing.List[WorkflowModule] = create_workflow_modules(
             *modules, workflow_id=workflow_id, force_mappings=True
         )
@@ -457,10 +458,10 @@ class WorkflowStructure(object):
             input_connections = {}
             for k, v in details["inputs"].items():
                 if v.connected_item.link_type == WorkflowInputLink.link_type:
-                    input_connections[k] = v.connected_item.name
-                    workflow_inputs.setdefault(v.connected_item.name, []).append(v.id)
+                    input_connections[k] = f"__parent__.{v.connected_item.name}"
+                    workflow_inputs.setdefault(v.connected_item.name, []).append(v.name)
                 elif v.connected_item.link_type == ModuleOutputLink.link_type:
-                    input_connections[k] = v.connected_item.id
+                    input_connections[k] = v.connected_item.name
                 else:
                     raise TypeError(
                         f"Invalid connection type: {type(v.connected_item)}"
@@ -469,10 +470,12 @@ class WorkflowStructure(object):
             output_connections: typing.Dict[str, typing.Any] = {}
             for k, v in details["outputs"].items():
                 for connected_item in v.connected_inputs:
-                    output_connections.setdefault(k, []).append(connected_item.id)
+                    output_connections.setdefault(k, []).append(connected_item.name)
                 if v.workflow_output:
-                    output_connections.setdefault(k, []).append(v.workflow_output.name)
-                    workflow_outputs[v.workflow_output.name] = v.id
+                    output_connections.setdefault(k, []).append(
+                        f"__parent__.{v.workflow_output.name}"
+                    )
+                    workflow_outputs[v.workflow_output.name] = v.name
 
             modules.append(
                 ChildModuleDetails(
@@ -483,6 +486,7 @@ class WorkflowStructure(object):
             )
 
         return WorkflowStructureDetails(
+            workflow_id=self._workflow_id,
             modules=modules,
             workflow_input_connections=workflow_inputs,
             workflow_output_connections=workflow_outputs,

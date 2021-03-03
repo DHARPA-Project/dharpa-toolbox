@@ -18,13 +18,10 @@ from dharpa.utils import (
     to_camel_case,
 )
 
-
 if typing.TYPE_CHECKING:
-    from dharpa.workflows.modules import WorkflowModule
     from dharpa.processing.processing_module import ProcessingModule
-    from dharpa.workflows.workflow import (
-        WorkflowProcessingModule,
-    )
+    from dharpa.workflows.modules import WorkflowModule
+    from dharpa.workflows.workflow import WorkflowProcessingModule
 
 
 def get_module_name_from_class(cls: Type):
@@ -98,10 +95,13 @@ def generate_workflow_processing_class_from_config(
         m_config.update(_workflow_config)
         m_config.setdefault("meta", {}).update(config.meta)
 
+        if not m_config.get("workflow_id", None):
+            m_config["workflow_id"] = config.module_type
+
         super(self.__class__, self).__init__(**m_config)
 
-    from dharpa.workflows.workflow import WorkflowProcessingModule
     from dharpa.models import WorkflowProcessingModuleConfigDynamic
+    from dharpa.workflows.workflow import WorkflowProcessingModule
 
     attrs = {
         "__init__": init,

@@ -22,6 +22,7 @@ class DataType(Enum):
     string = {"id": "string", "python": str}
     dict = {"id": "dict", "python": dict}
     boolean = {"id": "boolean", "python": bool}
+    table = {"id": "table", "python": typing.List[typing.Dict]}
 
 
 class DataSchema(object):

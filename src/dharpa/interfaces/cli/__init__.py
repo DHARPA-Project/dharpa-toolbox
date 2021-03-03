@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-import typing
-
 import asyncclick as click
+import sys
+import typing
+from rich import print as rich_print
+
 import dharpa
 from dharpa.models import ModuleState
 from dharpa.processing.processing_module import (
@@ -10,8 +12,6 @@ from dharpa.processing.processing_module import (
 )
 from dharpa.utils import get_data_from_file
 from dharpa.workflows.workflow import DharpaWorkflow, WorkflowProcessingModule
-from rich import print as rich_print
-
 
 # workflow_descriptions_folder = (
 #     "/home/markus/projects/dharpa/dharpa-toolbox/dev/workflows"
@@ -35,7 +35,12 @@ def run():
 
 
 @module.group()
-def json_state():
+def state_json():
+    pass
+
+
+@module.group()
+def state_graph():
     pass
 
 
@@ -63,10 +68,12 @@ for name in dharpa.DHARPA_MODULES.all_names:
             print(dw.outputs.ALL)
         else:
             print("Not all inputs ready.")
+            for k, v in dw.inputs.items():
+                print(f"  {k}: {v.value}")
 
-    short_help = f"print the state module '{name}' as json"
+    short_help = f"print the state of module '{name}' as json"
 
-    @json_state.command(  # noqa
+    @state_json.command(  # noqa
         name=name,
         short_help=short_help,
         context_settings=dict(
@@ -81,11 +88,40 @@ for name in dharpa.DHARPA_MODULES.all_names:
             inputs = get_data_from_file(path_to_inputs)
             dw.inputs = inputs
 
-        if dw.state != ModuleState.STALE:
-            await dw.process()
+        await dw.process()
 
         json_str = dw.to_json(indent=2)
         print(json_str)
+
+    short_help = f"print the state of module '{name}' as network graph"
+
+    @state_graph.command(  # noqa
+        name=name,
+        short_help=short_help,
+        context_settings=dict(
+            ignore_unknown_options=True,
+        ),
+    )
+    @click.argument("path_to_inputs", nargs=1, required=False)
+    async def module_run_command(path_to_inputs, name=name):
+
+        try:
+            from asciinet import graph_to_ascii
+        except:  # noqa
+            print(
+                "\nCan't print graph on terminal, package 'asciinet' not available. Please install it into the current virtualenv using:\n\npip install 'git+https://github.com/cosminbasca/asciinet.git#egg=asciinet&subdirectory=pyasciinet'"
+            )
+            sys.exit(1)
+
+        dw: DharpaWorkflow = dharpa.create_workflow(name)
+        if path_to_inputs:
+            inputs = get_data_from_file(path_to_inputs)
+            dw.inputs = inputs
+
+        await dw.process()
+
+        g = dw.create_state_graph(show_structure=True)
+        print(graph_to_ascii(g))
 
 
 @module.command()

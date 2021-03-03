@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 import time
 import typing
+from pydantic import Field
 
 from dharpa.data.core import DataSchema
 from dharpa.models import ProcessingModuleConfig
 from dharpa.workflows.modules import ProcessingModule
-from pydantic import Field
-
 
 if typing.TYPE_CHECKING:
     from dharpa.workflows.modules import InputItems, OutputItems
@@ -14,6 +13,8 @@ if typing.TYPE_CHECKING:
 
 class DummyProcessingModuleConfig(ProcessingModuleConfig):
     """Configuration for the 'dummy' processing module."""
+
+    doc: typing.Optional[str] = None
 
     input_schema: typing.Mapping[str, typing.Mapping] = Field(
         description="the input schema for this module"
@@ -56,3 +57,12 @@ class DummyProcessingModule(ProcessingModule):
 
         output_values: typing.Mapping = self.config.get("outputs")  # type: ignore
         outputs.set_values(**output_values)
+
+    def _get_doc(self) -> str:
+
+        doc = self.config.get("doc", None)
+
+        if doc:
+            return self.config["doc"]
+        else:
+            return super()._get_doc()

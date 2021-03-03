@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 import typing
 from enum import Enum
+from pydantic import BaseModel, Extra, Field, root_validator, validator
 
 from dharpa import DHARPA_MODULES
 from dharpa.data.core import DataType
 from dharpa.defaults import MODULE_TYPE_KEY
-from pydantic import BaseModel, Extra, Field, root_validator, validator
-
 
 if typing.TYPE_CHECKING:
     from dharpa.processing.processing_module import ProcessingModule
@@ -212,6 +211,26 @@ class ModuleDetails(BaseModel):
         use_enum_values = True
         extra = Extra.forbid
 
+    def __hash__(self):
+        return hash(self.address)
+
+    def __str__(self):
+
+        return f"module: {self.address}\nstate: {self.state}"
+
+
+class ValueNode(BaseModel):
+    module: ModuleDetails
+    value_name: str
+    item: ValueItem
+    type: str
+
+    def __hash__(self):
+        return hash((self.module.address, self.value_name, self.type))
+
+    def __str__(self):
+        return f"{self.type}: {self.module.address}.{self.value_name}\ntype: {self.item.item_schema.type}\nvalue: {self.item.value}"
+
 
 class ChildModuleDetails(BaseModel):
 
@@ -225,6 +244,7 @@ class ChildModuleDetails(BaseModel):
 
 class WorkflowStructureDetails(BaseModel):
 
+    workflow_id: str
     modules: typing.List[ChildModuleDetails]
     workflow_input_connections: typing.Dict[str, typing.List[str]]
     workflow_output_connections: typing.Dict[str, str]
