@@ -20,14 +20,14 @@ a json or yaml file. For examples of such workflow files, check the ``src/resour
 I've prepared 3 workflows that mirror logic gates: ``nand``, ``nor``, ``xor``. All developers should be familiar with those,
 and the fact that complex logic gates can be assembled out of a combination of ``and``, ``or`` and ``not`` gates. Those basic modules are
 written in Python, and can be found under ``src/dharpa/processing/core/logic_gates``.
-I figured that using logic gates makes sense, since it's easy to reckognise the graphs created out of such workflows, since
-that is fairly similar to how those complex gates are visualized normally. Also, in this scenario we don't have to yet
+I figured that using logic gates makes sense, since it's easy to recognise the graphs created out of such workflows, since
+that is fairly similar to how complex gate-structures are visualized anyway. Also, in this scenario we don't have to yet
 worry about data transfer, since all we are dealing with are booleans. And lastly, this will be very helpful for testing
-the code that manages workflow/pipeline logic, since we can predict very easily the needed output for even complex
+the code that manages workflow/pipeline logic, since we can predict very easily the correct output for even complex
 workflow structures.
 
 The other approach I've prepared for is using a ``dummy`` module. This is a Python class (in ``src/dharpa/processing/core/dummy``)
-whose input- and output-schema as well as the output values can be dynamically pre-configured, so it's well suited to
+whose input- and output-schema as well as the output values can be hard-coded, so it's well suited to
 create the structure of a workflow without having to implement any of the business logic (we just assume that the pre-set
 output values will be the right result for whatever input there is). A good first step after the wireframe for a workflow is ready,
 because it forces the workflow creator to think about the inputs and outputs, their schema, and how everything is connected.
