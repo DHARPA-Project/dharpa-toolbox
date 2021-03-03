@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
-
 from appdirs import AppDirs
-
 
 dharpa_app_dirs = AppDirs("dharpa", "dharpa")
 

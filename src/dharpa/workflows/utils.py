@@ -120,9 +120,6 @@ def generate_workflow_processing_class_from_config(
     return cls
 
 
-# def create_workflow(module_name: str)
-
-
 def create_workflow_modules(
     *configs: typing.Union["WorkflowModule", typing.Mapping],
     workflow_id: str = None,
@@ -154,6 +151,12 @@ def create_workflow_modules(
             m_id = _c.pop("module_alias", None)
             input_links = _c.pop("input_links", None)
             processing_config = ProcessingConfig.from_dict(**_c)
+
+            if m_id is None:
+                m_id = processing_config.module_type
+
+            if not workflow_id:
+                workflow_id = m_id
 
             if processing_config.is_pipeline:
                 m = DharpaWorkflow(

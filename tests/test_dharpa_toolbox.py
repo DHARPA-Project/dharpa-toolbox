@@ -3,8 +3,9 @@
 
 """Tests for `dharpa_toolbox` package."""
 
-import dharpa
 import pytest  # noqa
+
+import dharpa
 
 
 def test_assert():

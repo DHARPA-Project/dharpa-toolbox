@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
+import anyio
 import atexit
 import typing
 from abc import ABCMeta, abstractmethod
+from anyio import create_task_group
 from concurrent.futures import ALL_COMPLETED, wait
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
-
-import anyio
-from anyio import create_task_group
-
 
 if typing.TYPE_CHECKING:
     from dharpa.processing.processing_module import ProcessingModule

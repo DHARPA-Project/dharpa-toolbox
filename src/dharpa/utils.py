@@ -7,11 +7,9 @@ import logging
 import os
 import re
 import typing
+import yaml
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Set, Type, Union
-
-import yaml
-
 
 log = logging.getLogger("dharpa")
 

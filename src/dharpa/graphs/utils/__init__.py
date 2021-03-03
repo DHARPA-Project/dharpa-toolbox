@@ -7,7 +7,7 @@ def graph_to_image(graph: nx.Graph):
     try:
         import pygraphviz as pgv  # noqa
     except:  # noqa
-        return "pygraphviz not available"
+        return "pygraphviz not available, please install it manually into the current virtualenv"
 
     G = nx.nx_agraph.to_agraph(graph)
 

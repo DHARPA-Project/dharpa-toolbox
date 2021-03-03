@@ -8,10 +8,9 @@
     PyScaffold helps you to put up the scaffold of your new Python project.
     Learn more under: https://pyscaffold.org/
 """
-import sys
-
 from setuptools import setup
 
+import sys
 
 try:
     from pkg_resources import VersionConflict, require

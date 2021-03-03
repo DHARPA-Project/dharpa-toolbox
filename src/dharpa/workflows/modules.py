@@ -312,7 +312,7 @@ class WorkflowModule(object):
     def outputs(self) -> OutputItems:
         return self._current_outputs
 
-    def to_details(self) -> ModuleDetails:
+    def to_details(self, include_structure: bool = True) -> ModuleDetails:
         inputs = {}
         for k, v in self.inputs.items():
             i = ValueItem(
@@ -340,14 +340,21 @@ class WorkflowModule(object):
             doc=self.doc,
         )
 
-    def to_dict(self, exclude_none: bool = False) -> typing.Dict[str, typing.Any]:
+    def to_dict(
+        self, include_structure: bool = True, exclude_none: bool = False
+    ) -> typing.Dict[str, typing.Any]:
 
-        details = self.to_details()
+        details = self.to_details(include_structure=include_structure)
         return details.dict(by_alias=True, exclude_none=exclude_none)
 
-    def to_json(self, exclude_none: bool = False, **dump_kwargs: typing.Any) -> str:
+    def to_json(
+        self,
+        include_structure: bool = True,
+        exclude_none: bool = False,
+        **dump_kwargs: typing.Any,
+    ) -> str:
 
-        details = self.to_details()
+        details = self.to_details(include_structure=include_structure)
         return details.json(by_alias=True, exclude_none=exclude_none, **dump_kwargs)
 
     def __repr__(self):

@@ -6,7 +6,6 @@ from abc import ABCMeta, abstractmethod
 from dharpa.data.core import DataSchema
 from dharpa.models import ProcessingModuleConfig
 
-
 if typing.TYPE_CHECKING:
     from dharpa.workflows.modules import InputItems, OutputItems
 

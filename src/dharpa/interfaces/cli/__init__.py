@@ -65,6 +65,7 @@ for name in dharpa.DHARPA_MODULES.all_names:
 
         if dw.state != ModuleState.STALE:
             await dw.process()
+            print("\nResult:\n")
             print(dw.outputs.ALL)
         else:
             print("Not all inputs ready.")
@@ -80,8 +81,15 @@ for name in dharpa.DHARPA_MODULES.all_names:
             ignore_unknown_options=True,
         ),
     )
+    @click.option(
+        "--show-structure",
+        "-s",
+        help="also show the internal structure",
+        is_flag=True,
+        default=False,
+    )
     @click.argument("path_to_inputs", nargs=1, required=False)
-    async def module_run_command(path_to_inputs, name=name):
+    async def module_run_command(path_to_inputs, show_structure, name=name):
 
         dw: DharpaWorkflow = dharpa.create_workflow(name)
         if path_to_inputs:
@@ -90,7 +98,7 @@ for name in dharpa.DHARPA_MODULES.all_names:
 
         await dw.process()
 
-        json_str = dw.to_json(indent=2)
+        json_str = dw.to_json(indent=2, include_structure=show_structure)
         print(json_str)
 
     short_help = f"print the state of module '{name}' as network graph"
@@ -102,8 +110,15 @@ for name in dharpa.DHARPA_MODULES.all_names:
             ignore_unknown_options=True,
         ),
     )
+    @click.option(
+        "--show-structure",
+        "-s",
+        help="also show the internal structure",
+        is_flag=True,
+        default=False,
+    )
     @click.argument("path_to_inputs", nargs=1, required=False)
-    async def module_run_command(path_to_inputs, name=name):
+    async def module_run_command(path_to_inputs, show_structure, name=name):
 
         try:
             from asciinet import graph_to_ascii
@@ -120,7 +135,7 @@ for name in dharpa.DHARPA_MODULES.all_names:
 
         await dw.process()
 
-        g = dw.create_state_graph(show_structure=True)
+        g = dw.create_state_graph(show_structure=show_structure)
         print(graph_to_ascii(g))
 
 

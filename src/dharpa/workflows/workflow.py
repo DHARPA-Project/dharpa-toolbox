@@ -458,7 +458,7 @@ class DharpaWorkflow(WorkflowModule):
     def structure(self) -> WorkflowStructure:
         return self._processing_obj.structure  # type: ignore
 
-    def to_details(self) -> ModuleDetails:
+    def to_details(self, include_structure: bool = True) -> ModuleDetails:
 
         inputs = {}
         for k, v in self.inputs.items():
@@ -476,8 +476,9 @@ class DharpaWorkflow(WorkflowModule):
             outputs[k] = o
 
         details = super().to_details()
-        structure_details = self.structure.to_details()
-        details.pipeline_structure = structure_details
+        if include_structure:
+            structure_details = self.structure.to_details()
+            details.pipeline_structure = structure_details
 
         return details
 

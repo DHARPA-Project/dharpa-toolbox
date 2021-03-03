@@ -30,7 +30,6 @@ class DataSchema(object):
         self,
         type: typing.Union[DataType, str],
         default: typing.Any = None,
-        nullable: bool = False,
     ):
 
         if isinstance(type, str):
@@ -62,6 +61,10 @@ class DataSchema(object):
     def __repr__(self):
 
         return f"{self.__class__.__name__}(type={self.type.name})"
+
+    # def __str__(self):
+    #
+    #     return json.dumps(self.to_dict())
 
 
 class DataItem(object):
@@ -242,3 +245,12 @@ class DataItems(collections.abc.MutableMapping):
     def __repr__(self):
 
         return f"DataItems(value_names={list(self._data_items.keys())} valid={self.items__are_valid})"
+
+
+def schemas_to_dict(**schemas: DataSchema):
+
+    result = {}
+    for name, schema in schemas.items():
+        result[name] = schema.to_dict()
+
+    return result
